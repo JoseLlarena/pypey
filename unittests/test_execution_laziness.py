@@ -238,7 +238,7 @@ def test_eager_printing_consumes_pipe():
     pipe = _123_pype()
 
     with raises(StopIteration):
-        next(iter(pipe.print(now=True)))
+        next(iter(pipe.print()))
 
 
 def test_lazy_printing_does_not_consume_pipe():

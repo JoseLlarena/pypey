@@ -241,7 +241,7 @@ def test_picking_a_key_is_deferred():
 def test_eager_printing_is_immediate():
     pipe = _123_pype()
 
-    pipe.print(now=True)
+    pipe.print()
 
     assert tuple(pipe) == ()
 

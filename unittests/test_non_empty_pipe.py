@@ -16,7 +16,7 @@ from unittests import _123_pype, _123, _654_pype, _654, _empty_pype, _a_fun_day_
     _aAfunFUNdayDAY_pype
 
 
-def test_it_is_iterable():
+def test_is_iterable():
     pipe = iter(_123_pype())
 
     assert next(pipe) == _123[0]
@@ -198,15 +198,15 @@ def test_picks_items_key():
 def test_prints_each_item_using_str():
     mock_stdout = Mock(spec_set=sys.stdout)
 
-    _a_fun_day_pype().print(file=mock_stdout, now=True)
+    _a_fun_day_pype().print(file=mock_stdout)
 
     mock_stdout.write.assert_has_calls([call('a'), call('\n'), call('fun'), call('\n'), call('day'), call('\n')])
 
 
-def test_it_prints_each_item_as_per_given_function():
+def test_prints_each_item_as_per_given_function():
     mock_stdout = Mock(spec_set=sys.stdout)
 
-    _123_pype().print(lambda n: f'n:{n}', file=mock_stdout, now=True)
+    _123_pype().print(lambda n: f'n:{n}', file=mock_stdout)
 
     mock_stdout.write.assert_has_calls([call('n:1'), call('\n'), call('n:2'), call('\n'), call('n:3'), call('\n')])
 

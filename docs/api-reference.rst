@@ -55,10 +55,10 @@ defers its execution until it's iterated through, at which point, the backing ``
 :func:`~pypey.Pype.do`, :func:`~pypey.Pype.map`, :func:`~pypey.Pype.print` and  :func:`~pypey.Pype.to_file` are
 intrinsically lazy but they can be eager in certain circumstances. The three side-effectful methods
 :func:`~pypey.Pype.do`, :func:`~pypey.Pype.print` and :func:`~pypey.Pype.to_file` can be made eager by setting their
-``now`` parameter to ``True`` (:func:`~pypey.Pype.to_file`'s is ``True`` by default) as they are often the last
-operations in a pipeline, when consumption of its backing ``Iterable`` is warranted. :func:`~pypey.Pype.do` and
-:func:`~pypey.Pype.map` consume their iterables when they are made parallel, if their ``workers`` parameter is set to
-a value larger than ``0``.
+``now`` parameter to ``True`` (:func:`~pypey.Pype.to_file`'s and :func:`~pypey.Pype.print`'s are ``True`` by default)
+as they are often the last operations in a pipeline, when consumption of its backing ``Iterable`` is warranted.
+:func:`~pypey.Pype.do` and :func:`~pypey.Pype.map` consume their iterables when they are made parallel, if their
+``workers`` parameter is set to a value larger than ``0``.
 
 In order to stop a lazy backing ``Iterable`` from being consumed, :func:`~pypey.Pype.clone` can be used to ensure that
 the consumption happens on the returned pipe and not the original one. :func:`~pypey.Pype.clone` manages this by

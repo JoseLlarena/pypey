@@ -152,7 +152,7 @@ Then use as:
 .. code-block:: python
 
     >>> from pypey import pype
-    >>> pype(range(-2, 3)).map(abs).print(now=True)
+    >>> pype(range(-2, 3)).map(abs).print()
     2
     1
     0

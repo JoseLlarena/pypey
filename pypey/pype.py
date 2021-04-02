@@ -577,7 +577,7 @@ class Pype(Generic[T]):
               end: str = '\n',
               file: IO = stdout,
               flush: bool = False,
-              now: bool = False) -> Pype[T]:
+              now: bool = True) -> Pype[T]:
         """
         Prints string returned by given function using ``print``:
         ::

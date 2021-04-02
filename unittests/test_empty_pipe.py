@@ -139,7 +139,7 @@ def test_picking_iterable_items_key_in_an_empty_pipe_returns_an_empty_pipe():
 def test_does_not_print_anything():
     mock_stdout = Mock(spec_set=sys.stdout)
 
-    _empty_pype().print(file=mock_stdout)
+    _empty_pype().print(file=mock_stdout, now=True)
 
     mock_stdout.write.assert_not_called()
 
