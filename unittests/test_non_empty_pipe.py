@@ -303,8 +303,16 @@ def test_sorts_items_with_key():
     assert tuple(_123_pype().sort(lambda n: -n)) == (3, 2, 1)
 
 
-def test_splits_pipeline():
-    assert tuple(map(tuple, _123_pype().split(lambda n: n == 2))) == ((1,), (2, 3,))
+def test_splits_pipeline_after_predicate_is_true():
+    assert tuple(map(tuple, _123_pype().split(lambda n: n == 2))) == ((1, 2), (3,))
+
+
+def test_splits_pipeline_before_predicate_is_true():
+    assert tuple(map(tuple, _123_pype().split(lambda n: n == 2, mode='before'))) == ((1,), (2, 3,))
+
+
+def test_splits_pipeline_before_and_after_predicate_is_true_leaving_true_items_out():
+    assert tuple(map(tuple, _123_pype().split(lambda n: n == 2, mode='at'))) == ((1,), (3,))
 
 
 def test_produces_tail_of_pipe():

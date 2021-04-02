@@ -62,8 +62,17 @@ def test_sorts_with_key_unpacking_items():
     assert tuple(_aAfunFUNdayDAY_pype().sort(lambda left, right: left)) == (('a', 'A'), ('day', 'DAY'), ('fun', 'FUN'))
 
 
+def test_splits_after_unpacked_items_fulfil_predicate():
+    assert tuple(map(tuple, _112233_pype().split(lambda left, right: left == 2))) == (_112233[0:2], _112233[2:])
+
+
 def test_splits_before_unpacked_items_fulfil_predicate():
-    assert tuple(map(tuple, _112233_pype().split(lambda left, right: left == 2))) == (_112233[0:1], _112233[1:])
+    assert tuple(map(tuple, _112233_pype().split(lambda left, right: left == 2, 'before'))) \
+           == (_112233[0:1], _112233[1:])
+
+
+def test_splits_before_and_after_unpacked_items_fulfil_predicate():
+    assert tuple(map(tuple, _112233_pype().split(lambda left, right: left == 2, 'at'))) == (_112233[0:1], _112233[2:])
 
 
 def test_takes_items_while_predicate_with_unpacked_is_true():

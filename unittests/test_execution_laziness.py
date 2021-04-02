@@ -15,9 +15,10 @@ from collections import namedtuple
 from operator import add
 from os.path import join
 
-from pytest import raises
+from pytest import raises, mark
 
 from pypey import Pype
+from pypey.pype import SPLIT_MODES
 from unittests import _23, _123, _fun_day, _aba_pype, _112233_pype, _112233, _123_pype, _a_fun_day_pype, \
     _aAfunFUNdayDAY_pype
 
@@ -339,10 +340,11 @@ def test_sorting_consumes_pipe():
     assert tuple(pipe) == ()
 
 
-def test_splitting_does_not_consume_pipe():
+@mark.parametrize('mode', SPLIT_MODES)
+def test_splitting_does_not_consume_pipe(mode):
     pipe = _123_pype()
 
-    next(iter(pipe.split(lambda n: n == 2)))
+    next(iter(pipe.split(lambda n: n == 2, mode=mode)))
 
     assert tuple(pipe) == (3,)
 

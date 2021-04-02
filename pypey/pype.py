@@ -37,6 +37,8 @@ logger = getLogger(__name__)
 
 flatten = chain.from_iterable
 
+SPLIT_MODES = {'at', 'after', 'before'}
+
 UNARY_WITHOUT_SIGNATURE = {__import__,
                            bool, bytearray, bytes,
                            classmethod,
@@ -853,23 +855,46 @@ class Pype(Generic[T]):
 
         return Pype(_deferred_sort(self._data(), None if key is None else _unpack_fn(key), rev))
 
-    def split(self: Pype[T], when: Fn[..., bool]) -> Pype[Pype[T]]:
+    def split(self: Pype[T], when: Fn[..., bool], mode: str = 'after') -> Pype[Pype[T]]:
         """
         Returns a pipe containing sub-pipes split off this pipe where the given ``when`` predicate is ``True``:
+
         ::
 
-            >>> [list(split) for split in pype([1, 2, 3, 4, 5]).split(lambda n: n%3)]
-            [[1], [2, 3], [4], [5]]
+            >>> [list(split) for split in pype(list('afunday')).split(lambda char: char == 'a')
+            [['a'], ['f', 'u', 'n', 'd', 'a'], ['y']]
 
-        Similar to ``more_itertools.split_before``.
+        The default mode is to split after every item for which the predicate is ``True``. When ``mode`` is set to
+        ``before``, the split is done before:
+
+        ::
+
+            >>> [list(split) for split in pype(list('afunday')).split(lambda char: char == 'a', 'before')]
+            [['a', 'f', 'u', 'n', 'd'], ['a', 'y']]
+
+        And when ``mode`` is set to ``at``, the pipe will be split both before and after, leaving the splitting item
+        out:
+
+        ::
+
+            >>> [list(split) for split in pype(list('afunday')).split(lambda char: char == 'a', 'at')]
+            [[], ['f', 'u', 'n', 'd'], ['y']]
+
+        Similar to ``more_itertools.split_before``, ``more_itertools.split_after`` and ``more_itertools.split_at``.
 
         :param when: A function possibly taking a unpacked item and returning ``True`` if this pipe should be split
             before this item
+        :param mode: which side of the splitting item the pipe is split, one of ``after``, ``at`` or ``before``
         :return: a pipe of pipes split off this pipe at items where ``when`` returns ``True``
-        :raises: ``TypeError`` if ``when`` is not a ``Callable``
+        :raises: ``TypeError`` if ``when`` is not a ``Callable`` or ``mode` is not a ``str``
+        :raises: ``ValueError`` if ``mode`` is a ``str`` but not one the supported ones
         """
-        # implementation based on ``more_itertools.split_before``
-        return Pype(map(Pype, _split(self._data(), _unpack_fn(when))))
+        require(isinstance(mode, str), f'mode should be a str but was [{mode}] instead')
+        require_val(mode in SPLIT_MODES, f'mode should be on of {SPLIT_MODES} but was [{mode}]')
+        # implementation based on ``more_itertools``'s ``split_before``, ``split_after`` and ``split_at``
+        splitting = _split_before if mode == 'before' else _split_after if mode == 'after' else _split_at
+
+        return Pype(map(Pype, splitting(self._data(), _unpack_fn(when))))
 
     def tail(self: Pype[T], n: int) -> Pype[T]:
         """
@@ -1313,18 +1338,49 @@ def _print_fn(item: T, ufn: Fn[..., Z], sep: str, end: str, file: IO, flush: boo
     print(ufn(item), sep=sep, end=end, file=file, flush=flush)
 
 
-def _split(data: Iterable[T], pred: Fn[..., bool]) -> Iterator[List[T]]:
-    buf: List[T] = []
+def _split_after(data: Iterable[T], pred: Fn[..., bool]) -> Iterator[List[T]]:
+    chunk = []
+
+    for item in data:
+        chunk.append(item)
+
+        if pred(item) and chunk:
+            yield chunk
+            chunk = []
+
+    if chunk:
+        yield chunk
+
+
+def _split_at(data: Iterable[T], pred: Fn[..., bool]) -> Iterator[List[T]]:
+    chunk: List[T] = []
 
     for item in data:
 
-        if pred(item) and buf:
-            yield buf
-            buf = []
+        if pred(item):
+            yield chunk
+            chunk = []
 
-        buf.append(item)
+        else:
+            chunk.append(item)
 
-    yield buf
+    if chunk:
+        yield chunk
+
+
+def _split_before(data: Iterable[T], pred: Fn[..., bool]) -> Iterator[List[T]]:
+    chunk: List[T] = []
+
+    for item in data:
+
+        if pred(item) and chunk:
+            yield chunk
+            chunk = []
+
+        chunk.append(item)
+
+    if chunk:
+        yield chunk
 
 
 def _unpack_fn(fn: Fn[..., T]) -> Fn[..., T]:

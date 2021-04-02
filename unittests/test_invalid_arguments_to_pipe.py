@@ -292,6 +292,18 @@ def test_splitting_fails_with_non_callable_predicate(fn):
         tuple(_123_pype().split(fn))
 
 
+@mark.parametrize('mode', [1, 1., lambda n: n, [1, 2]])
+def test_splitting_fails_with_non_string_modes(mode):
+    """"""
+    with raises(TypeError):
+        tuple(_123_pype().split(lambda n: n == 2, mode=mode))
+
+
+def test_splitting_fails_with_unsupported_modes():
+    """"""
+    with raises(ValueError):
+        tuple(_123_pype().split(lambda n: n == 2, mode='non-existent'))
+
 @mark.parametrize('n', NON_INTS)
 def test_asking_for_last_n_items_fails_with_non_int_n(n):
     """"""

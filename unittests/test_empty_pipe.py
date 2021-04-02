@@ -8,7 +8,7 @@ from unittest.mock import Mock, create_autospec
 
 import sys
 from pytest import raises
-
+from pytest import mark
 from pypey import Pype
 from unittests import _empty_pype, _123_pype, _123
 
@@ -201,8 +201,9 @@ def test_sorting_returns_an_empty_pipe():
     assert tuple(_empty_pype().sort()) == ()
 
 
-def test_splitting_pipe_returns_empty_pipe():
-    assert tuple(_empty_pype().select(lambda n: n < 2)) == ()
+@mark.parametrize('mode', ('after', 'at', 'before'))
+def test_splitting_pipe_returns_empty_pipe(mode):
+    assert tuple(_empty_pype().split(lambda n: n < 2, mode=mode)) == ()
 
 
 def test_asking_for_tail_returns_empty_pipe():

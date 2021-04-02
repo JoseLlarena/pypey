@@ -14,7 +14,9 @@ from math import sqrt
 from operator import add
 from os.path import join
 
-from pypey.pype import Pype
+from pytest import mark
+
+from pypey.pype import Pype, SPLIT_MODES
 from unittests import _123, _123_pype, _a_fun_day, _aba_pype, _aba, _112233_pype, _112233, _a_fun_day_pype
 
 
@@ -342,10 +344,11 @@ def test_sorting_is_deferred():
     assert tuple(pipe) == _123
 
 
-def test_splitting_is_deferred():
+@mark.parametrize('mode', SPLIT_MODES)
+def test_splitting_is_deferred(mode):
     pipe = _123_pype()
 
-    pipe.split(lambda n: n == 2)
+    pipe.split(lambda n: n == 2, mode=mode)
 
     assert tuple(pipe) == _123
 
