@@ -1,4 +1,5 @@
 from functools import partial
+from inspect import signature
 from typing import Any, Callable, TypeVar, Iterable, Type, Tuple, _VariadicGenericAlias
 
 __all__ = ['Fn', 'H', 'I', 'K', 'T', 'V', 'X', 'Z', 'px', 'ident', 'pipe', 'require', 'require_val', 'throw']
@@ -12,9 +13,9 @@ X = TypeVar('X')
 Z = TypeVar('Z')
 
 #:
-Fn: _VariadicGenericAlias = Callable # Concise alias of ``typing.Callable``
+Fn: _VariadicGenericAlias = Callable  # Concise alias of ``typing.Callable``
 #:
-px: Callable[..., Callable] = partial # Concise alias of ``functools.partial``
+px: Callable[..., Callable] = partial  # Concise alias of ``functools.partial``
 
 
 def ident(item: T) -> T:
@@ -98,11 +99,14 @@ def throw(exception: Type[Exception], message: str):
     raise exception(message)
 
 
-def _pipe_functions(arg: Any, functions: Tuple[Fn[..., Any], ...]) -> Any:
+def _pipe_functions(*arg: Any, functions: Tuple[Fn[..., Any], ...]) -> Any:
     # created as global function to avoid issues with multiprocessing
-    result = arg
+    result = arg if len(arg) > 1 else arg[0]
 
     for fn in functions:
-        result = fn(result)
+        try:
+            result = fn(result) if len(signature(fn).parameters) == 1 else fn(*result)
+        except:
+            result = fn(result)
 
     return result
