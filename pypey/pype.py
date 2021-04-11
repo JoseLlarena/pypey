@@ -957,7 +957,7 @@ class Pype(Generic[T]):
         :raises: ``TypeError`` if any of the provided functions is not a ``Callable``
         """
 
-        return pipe(*(fn,) + other_fns)(self._data())
+        return pipe(*(fn,) + other_fns)(self)
 
     def to_file(self: Pype[T],
                 target: Union[AnyStr, PathLike, int],

@@ -9,6 +9,7 @@ from unittest.mock import Mock, create_autospec
 import sys
 from pytest import raises
 
+from pypey import Pype
 from unittests import _empty_pype, _123_pype, _123
 
 
@@ -217,7 +218,7 @@ def test_teeing_returns_a_pipe_with_n_empty_pipes():
 
 
 def test_applies_function_to_itself():
-    assert _empty_pype().to(list) == []
+    assert _empty_pype().to(Pype.size) == 0
 
 
 def test_applies_functions_to_itself():
