@@ -1,5 +1,6 @@
 from functools import partial
 from inspect import signature
+from inspect import Parameter
 from typing import Any, Callable, TypeVar, Iterable, Type, Tuple, _VariadicGenericAlias
 
 __all__ = ['Fn', 'H', 'I', 'K', 'T', 'V', 'X', 'Z', 'px', 'ident', 'pipe', 'require', 'require_val', 'throw']
@@ -105,8 +106,13 @@ def _pipe_functions(*arg: Any, functions: Tuple[Fn[..., Any], ...]) -> Any:
 
     for fn in functions:
         try:
-            result = fn(result) if len(signature(fn).parameters) == 1 else fn(*result)
-        except:
+
+            params = signature(fn).parameters.values()
+            num_args = len([par for par in params if par.default == par.empty and par.kind != Parameter.VAR_KEYWORD])
+            result = fn(result) if num_args <= 1 else fn(*result)
+
+        except ValueError:
+
             result = fn(result)
 
     return result
