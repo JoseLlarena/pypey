@@ -143,19 +143,6 @@ def test_grouping_fails_with_non_callable_keys(fn):
         tuple(_123_pype().group_by(fn))
 
 
-@mark.parametrize('n', NON_INTS)
-def test_asking_for_first_n_items_fails_with_non_int_n(n):
-    """"""
-    with raises(TypeError):
-        tuple(_123_pype().head(n))
-
-
-def test_asking_for_negative_first_items_fails():
-    """"""
-    with raises(ValueError):
-        tuple(_123_pype().head(-1))
-
-
 @mark.parametrize('fn', NON_CALLABLES)
 def test_mapping_fails_with_non_callable_function(fn):
     """"""
@@ -304,17 +291,12 @@ def test_splitting_fails_with_unsupported_modes():
     with raises(ValueError):
         tuple(_123_pype().split(lambda n: n == 2, mode='non-existent'))
 
+
 @mark.parametrize('n', NON_INTS)
-def test_asking_for_last_n_items_fails_with_non_int_n(n):
+def test_asking_for_first_or_last_n_items_fails_with_non_int_n(n):
     """"""
     with raises(TypeError):
-        tuple(_123_pype().tail(n))
-
-
-def test_asking_for_negative_last_items_fails():
-    """"""
-    with raises(ValueError):
-        tuple(_123_pype().tail(-1))
+        tuple(_123_pype().take(n))
 
 
 @mark.parametrize('fn', NON_CALLABLES)

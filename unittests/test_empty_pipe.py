@@ -106,10 +106,6 @@ def test_grouping_items_by_key_in_empty_pipe_returns_empty_pipe():
     assert tuple(_empty_pype().group_by(len)) == ()
 
 
-def test_asking_for_the_head_of_an_empty_pipe_returns_an_empty_pipe():
-    assert tuple(_empty_pype().head(1)) == ()
-
-
 def test_concise_iteration_is_not_possible():
     with raises(StopIteration):
         next(_empty_pype().__iter__())
@@ -206,8 +202,12 @@ def test_splitting_pipe_returns_empty_pipe(mode):
     assert tuple(_empty_pype().split(lambda n: n < 2, mode=mode)) == ()
 
 
+def test_asking_for_the_head_of_an_empty_pipe_returns_an_empty_pipe():
+    assert tuple(_empty_pype().take(1)) == ()
+
+
 def test_asking_for_tail_returns_empty_pipe():
-    assert tuple(_empty_pype().tail(2)) == ()
+    assert tuple(_empty_pype().take(-2)) == ()
 
 
 def test_taking_items_until_condition_is_true_returns_empty_pipe():

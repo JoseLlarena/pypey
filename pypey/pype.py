@@ -458,24 +458,6 @@ class Pype(Generic[T]):
 
         return Pype(_deferred_group_by(self._data(), _unpack_fn(key)))
 
-    def head(self: Pype[T], n: int) -> Pype[T]:
-        """
-        Selects the first n items of this pipe.
-
-        >>> list(pype([1, 2, 3]).head(2))
-        [1, 2]
-
-        Also known as ``take``.
-
-        :param n: the number of elements to take
-        :return: a pipe with the first ``n``  elements of this pipe
-        :raises: ``TypeError`` if ``n`` is not an ``int``
-        :raises: ``ValueError`` if ``n`` is negative
-        """
-        require(isinstance(n, int), f'n needs to be an int but was [{type(n)}]')
-
-        return Pype(islice(self._data(), n))
-
     def it(self: Pype[T]) -> Iterator[T]:
         """
         Returns an ``Iterator`` for this pipe's items. It's a more concise version of, and functionally identical
@@ -896,24 +878,32 @@ class Pype(Generic[T]):
 
         return Pype(map(Pype, splitting(self._data(), _unpack_fn(when))))
 
-    def tail(self: Pype[T], n: int) -> Pype[T]:
+    def take(self: Pype[T], n: int) -> Pype[T]:
         """
-        Returns a pipe containing the last ``n`` items of this pipe:
+        Returns a pipe containing the first or last ``n`` items of this pipe, depending on the sign of ``n``:
         ::
 
-            >>> list(pype([1, 2, 3, 4]).tail(2))
+            >>> list(pype([1, 2, 3, 4]).take(-2))
             [3, 4]
 
-        This operation is eager but deferred.
+            >>>list(pype([1, 2, 3, 4]).take(2))
+            [1, 2]
 
-        :param n: a positive ``int`` specifying the number of items of this pipe's tail
-        :return: a pipe with this pipe's last ``n`` items
+        This operation is eager but deferred when ``n`` is negative else it's lazy.
+
+        Also know as `head` and `tail`.
+
+        :param n: a negative ``int`` specifying the number of items of this pipe's tail or a positive ``int`` for the
+            first ``n``  elements
+        :return: a pipe with this pipe's first or last ``n`` items
         :raises: ``TypeError`` if ``n`` is not an ``int``
-        :raises: ``ValueError`` if ``n`` is negative
+
         """
         require(isinstance(n, int), f'n needs to be an int but was [{type(n)}]')
 
-        return Pype(_deferred_tail(self._data(), n))
+        slicing = islice if n >= 0 else _deferred_tail
+
+        return Pype(slicing(self._data(), abs(n)))
 
     def take_while(self: Pype[T], pred: Fn[..., bool]) -> Pype[T]:
         """

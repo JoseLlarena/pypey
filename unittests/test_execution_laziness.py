@@ -177,14 +177,6 @@ def test_grouping_by_key_consumes_pipe():
     assert tuple(pipe) == ()
 
 
-def test_asking_for_first_n_items_does_not_consume_pipe():
-    pipe = _123_pype()
-
-    next(iter(pipe.head(1)))
-
-    assert tuple(pipe) == _23
-
-
 def test_concise_iteration_does_not_consume_pipe():
     pipe = _123_pype()
 
@@ -349,10 +341,18 @@ def test_splitting_does_not_consume_pipe(mode):
     assert tuple(pipe) == (3,)
 
 
-def test_asking_for_last_n_items_does_not_consume_pipe():
+def test_asking_for_first_n_items_does_not_consume_pipe():
     pipe = _123_pype()
 
-    next(iter(pipe.tail(3)))
+    next(iter(pipe.take(1)))
+
+    assert tuple(pipe) == _23
+
+
+def test_asking_for_last_n_items_consumes_pipe():
+    pipe = _123_pype()
+
+    next(iter(pipe.take(-3)))
 
     assert tuple(pipe) == ()
 

@@ -63,7 +63,7 @@ def test_cycles_through_pipe_for_given_number_of_times():
 
 
 def test_cycles_through_pipe_forever_if_not_given_number_of_times():
-    assert tuple(_123_pype().cycle().head(9)) == _123 + _123 + _123
+    assert tuple(_123_pype().cycle().take(9)) == _123 + _123 + _123
 
 
 def test_cycling_with_zero_number_of_times_returns_an_empty_pipe():
@@ -147,18 +147,6 @@ def test_transforms_iterable_items_and_flattens_them_into_a_pipe_of_elements():
 
 def test_groups_items_by_given_key():
     assert tuple(_a_fun_day_pype().group_by(len)) == ((1, ['a']), (3, ['fun', 'day']))
-
-
-def test_returns_the_first_n_items():
-    assert tuple(_123_pype().head(1)) == (1,)
-
-
-def test_returns_empty_pipe_when_asked_for_0_first_items():
-    assert tuple(_123_pype().head(0)) == ()
-
-
-def test_asking_for_more_first_items_than_size_is_the_same_as_asking_for_as_many_first_items_as_size():
-    assert tuple(_123_pype().head(10)) == tuple(_123_pype().head(3))
 
 
 def test_concisely_allows_iteration_through_elements():
@@ -315,12 +303,24 @@ def test_splits_pipeline_before_and_after_predicate_is_true_leaving_true_items_o
     assert tuple(map(tuple, _123_pype().split(lambda n: n == 2, mode='at'))) == ((1,), (3,))
 
 
+def test_returns_the_first_n_items():
+    assert tuple(_123_pype().take(1)) == (1,)
+
+
+def test_returns_empty_pipe_when_asked_for_0_first_items():
+    assert tuple(_123_pype().take(0)) == ()
+
+
+def test_asking_for_more_first_items_than_size_is_the_same_as_asking_for_as_many_first_items_as_size():
+    assert tuple(_123_pype().take(10)) == tuple(_123_pype().take(3))
+
+
 def test_produces_tail_of_pipe():
-    assert tuple(_123_pype().tail(2)) == _23
+    assert tuple(_123_pype().take(-2)) == _23
 
 
 def test_asking_for_more_last_items_than_size_is_the_same_as_asking_for_as_many_last_items_as_size():
-    assert tuple(_123_pype().tail(10)) == tuple(_123_pype().tail(3))
+    assert tuple(_123_pype().take(-10)) == tuple(_123_pype().take(-3))
 
 
 def test_selects_items_until_condition_is_true():

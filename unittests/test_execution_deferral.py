@@ -178,14 +178,6 @@ def test_grouping_by_key_is_deferred():
     assert tuple(pipe) == _a_fun_day
 
 
-def test_asking_for_first_n_items_is_deferred():
-    pipe = _123_pype()
-
-    pipe.head(1)
-
-    assert tuple(pipe) == _123
-
-
 def test_concise_iteration_is_deferred():
     pipe = _123_pype()
 
@@ -353,10 +345,18 @@ def test_splitting_is_deferred(mode):
     assert tuple(pipe) == _123
 
 
+def test_asking_for_first_n_items_is_deferred():
+    pipe = _123_pype()
+
+    pipe.take(1)
+
+    assert tuple(pipe) == _123
+
+
 def test_asking_for_last_n_items_is_deferred():
     pipe = _123_pype()
 
-    pipe.tail(1)
+    pipe.take(-1)
 
     assert tuple(pipe) == _123
 
