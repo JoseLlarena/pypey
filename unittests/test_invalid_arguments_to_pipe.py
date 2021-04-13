@@ -103,6 +103,13 @@ def test_side_effect_fails_with_negative_workers():
         tuple(_123_pype().do(lambda x: x * 2, workers=-1))
 
 
+@mark.parametrize('n', NON_INTS)
+def test_drop_fails_with_non_ints(n):
+    """"""
+    with raises(TypeError):
+        tuple(_123_pype().drop(n))
+
+
 @mark.parametrize('fn', NON_CALLABLES)
 def test_rejecting_while_condition_is_true_fails_with_non_callables(fn):
     """"""
@@ -217,19 +224,6 @@ def test_selecting_items_fails_with_non_callable_predicate(fn):
     """"""
     with raises(TypeError):
         tuple(_123_pype().select(fn))
-
-
-@mark.parametrize('n', NON_INTS)
-def test_skipping_fails_with_non_ints(n):
-    """"""
-    with raises(TypeError):
-        tuple(_123_pype().skip(n))
-
-
-def test_skipping_fails_with_negatives():
-    """"""
-    with raises(ValueError):
-        tuple(_123_pype().skip(-1))
 
 
 @mark.parametrize('n', NON_INTS)

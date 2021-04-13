@@ -130,6 +130,22 @@ def test_parallel_side_effect_can_be_made_immediate():
     assert tuple(pipe) == _123
 
 
+def test_dropping_first_items_is_deferred():
+    pipe = _123_pype()
+
+    pipe.drop(1)
+
+    assert tuple(pipe) == _123
+
+
+def test_dropping_last_items_is_deferred():
+    pipe = _123_pype()
+
+    pipe.drop(-1)
+
+    assert tuple(pipe) == _123
+
+
 def test_drop_while_is_deferred():
     pipe = _123_pype()
 
@@ -310,14 +326,6 @@ def test_returning_size_is_immediate():
     pipe.size()
 
     assert tuple(pipe) == ()
-
-
-def test_skipping_is_deferred():
-    pipe = _123_pype()
-
-    pipe.skip(1)
-
-    assert tuple(pipe) == _123
 
 
 def test_slicing_is_deferred():

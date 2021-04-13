@@ -185,8 +185,12 @@ def test_size_is_zero():
     assert _empty_pype().size() == 0
 
 
-def test_skipping_first_n_items_an_empty_pipe():
-    assert tuple(_empty_pype().skip(2)) == ()
+def test_dropping_first_n_items_returns_an_empty_pipe():
+    assert tuple(_empty_pype().drop(2)) == ()
+
+
+def test_dropping_last_n_items_returns_an_empty_pipe():
+    assert tuple(_empty_pype().drop(-1)) == ()
 
 
 def test_slicing_returns_an_empty_pipe():

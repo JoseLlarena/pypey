@@ -14,6 +14,7 @@ or immediate:
 |            | :func:`~pypey.Pype.cycle`        |                                  |
 |            | :func:`~pypey.Pype.dist`         |                                  |
 |            | :func:`~pypey.Pype.do`           |                                  |
+|            | :func:`~pypey.Pype.drop`         |                                  |
 |            | :func:`~pypey.Pype.drop_while`   |                                  |
 |            | :func:`~pypey.Pype.enum`         |                                  |
 |            | :func:`~pypey.Pype.flat`         |                                  |
@@ -25,7 +26,6 @@ or immediate:
 |            | :func:`~pypey.Pype.print`        |                                  |
 |            | :func:`~pypey.Pype.reject`       |                                  |
 |            | :func:`~pypey.Pype.select`       |                                  |
-|            | :func:`~pypey.Pype.skip`         |                                  |
 |            | :func:`~pypey.Pype.slice`        |                                  |
 |            | :func:`~pypey.Pype.split`        |                                  |
 |            | :func:`~pypey.Pype.take`         |                                  |
@@ -60,7 +60,7 @@ as they are often the last operations in a pipeline, when consumption of its bac
 :func:`~pypey.Pype.do` and :func:`~pypey.Pype.map` consume their iterables when they are made parallel, if their
 ``workers`` parameter is set to a value larger than ``0``.
 
-:func:`~pypey.Pype.take` is lazy when its parameter is positive (head) and eager when its negative (tail).
+:func:`~pypey.Pype.take` is lazy when it's parameter is positive (head) and eager when it's negative (tail).
 
 In order to stop a lazy backing ``Iterable`` from being consumed, :func:`~pypey.Pype.clone` can be used to ensure that
 the consumption happens on the returned pipe and not the original one. :func:`~pypey.Pype.clone` manages this by
@@ -100,11 +100,11 @@ return a subset of the pipe's items:
 |               | :func:`~pypey.Pype.window`       |
 |               | :func:`~pypey.Pype.zip`          |
 +---------------+----------------------------------+
-|**Selections** | :func:`~pypey.Pype.drop_while`   |
+|**Selections** | :func:`~pypey.Pype.drop`         |
+|               | :func:`~pypey.Pype.drop_while`   |
 |               | :func:`~pypey.Pype.reject`       |
 |               | :func:`~pypey.Pype.sample`       |
 |               | :func:`~pypey.Pype.select`       |
-|               | :func:`~pypey.Pype.skip`         |
 |               | :func:`~pypey.Pype.slice`        |
 |               | :func:`~pypey.Pype.take`         |
 |               | :func:`~pypey.Pype.take_while`   |
@@ -131,7 +131,7 @@ Some methods are just specialisations, or convenient versions of others:
 +----------------------------------+----------------------------------+
 | :func:`~pypey.Pype.select`       | :func:`~pypey.Pype.reject`       |
 +----------------------------------+----------------------------------+
-| :func:`~pypey.Pype.slice`        | :func:`~pypey.Pype.skip`         |
+| :func:`~pypey.Pype.slice`        | :func:`~pypey.Pype.drop`         |
 |                                  | :func:`~pypey.Pype.take`         |
 +----------------------------------+----------------------------------+
 | :func:`~pypey.Pype.zip`          | :func:`~pypey.Pype.enum`         |

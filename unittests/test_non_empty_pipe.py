@@ -125,6 +125,26 @@ def test_produces_a_side_effect_per_item_in_parallel():
     assert PARALLEL_SUM.value == sum(_123)
 
 
+def test_drops_given_number_of_first_items():
+    assert tuple(_123_pype().drop(1)) == (2, 3)
+
+
+def test_dropping_zero_items_returns_the_same_pipe():
+    assert tuple(_123_pype().drop(0)) == (1, 2, 3)
+
+
+def test_dropping_more_first_items_than_there_are_in_pipe_is_the_same_as_skipping_as_many_as_there_are_in_it():
+    assert tuple(_123_pype().drop(10)) == ()
+
+
+def test_drops_given_number_of_last_items():
+    assert tuple(_123_pype().drop(-2)) == (1,)
+
+
+def test_dropping_more_last_items_than_there_are_in_pipe_is_the_same_as_skipping_as_many_as_there_are_in_it():
+    assert tuple(_123_pype().drop(-10)) == (  )
+
+
 def test_rejects_items_until_condition_is_true():
     assert tuple(_123_pype().drop_while(lambda n: n != 2)) == _23
 
@@ -253,18 +273,6 @@ def test_shuffles_items_with_given_seed():
 
 def test_returns_size_of_pipe():
     assert _123_pype().size() == len(_123)
-
-
-def test_skips_given_number_of_items():
-    assert tuple(_123_pype().skip(1)) == (2, 3)
-
-
-def test_skipping_zero_items_returns_the_same_pipe():
-    assert tuple(_123_pype().skip(0)) == (1, 2, 3)
-
-
-def test_skipping_more_items_than_there_are_in_pipe_is_the_same_as_skipping_as_many_as_there_are_in_it():
-    assert tuple(_123_pype().skip(10)) == ()
 
 
 def test_produces_slice_of_pipe():

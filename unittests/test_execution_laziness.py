@@ -129,6 +129,22 @@ def test_parallel_eager_side_effect_consumes_pipe_but_tees_it():
     assert tuple(pipe) == _123
 
 
+def test_dropping_first_items_does_not_consume_pipe():
+    pipe = _123_pype()
+
+    next(iter(pipe.drop(1)))
+
+    assert tuple(pipe) == (3,)
+
+
+def test_dropping_last_items_does_not_consume_pipe():
+    pipe = _123_pype()
+
+    next(iter(pipe.drop(-1)))
+
+    assert tuple(pipe) == (3,)
+
+
 def test_dropping_items_while_predicate_is_false_does_not_consume_pipe():
     pipe = _123_pype()
 
@@ -306,14 +322,6 @@ def test_asking_for_size_consumes_pipe():
 
     with raises(StopIteration):
         next(iter(pipe))
-
-
-def test_skipping_does_not_consume_pipe():
-    pipe = _123_pype()
-
-    next(iter(pipe.skip(1)))
-
-    assert tuple(pipe) == (3,)
 
 
 def test_slicing_does_not_consume_pipe():

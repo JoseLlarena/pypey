@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from logging import getLogger
 from multiprocessing import Pool
 from operator import eq
@@ -37,7 +37,7 @@ logger = getLogger(__name__)
 
 flatten = chain.from_iterable
 
-SPLIT_MODES = {'at', 'after', 'before'}
+SPLIT_MODES = frozenset({'at', 'after', 'before'})
 
 UNARY_WITHOUT_SIGNATURE = {__import__,
                            bool, bytearray, bytes,
@@ -369,6 +369,29 @@ class Pype(Generic[T]):
             return self
 
         return Pype(side_effect(ufn, data))
+
+    def drop(self: Pype[T], n: int) -> Pype[T]:
+        """
+        Returns this pipe but with the first or last ``n`` items missing:
+        ::
+
+            >>> list(pype([1, 2, 3, 4]).drop(2))
+            [3, 4]
+
+            >>> list(pype([1, 2, 3, 4]).drop(-2))
+            [1, 2]
+
+        :param n: number of items to skip, positive if at the beginning of the pipe, negative at the end
+        :return: pipe with ``n`` dropped items
+        :raises: ``TypeError`` if ``n`` is not an ``int``
+
+        """
+        require(isinstance(n, int), f'start needs to be an int but was [{type(n)}]')
+
+        if n == 0:
+            return self
+
+        return Pype(islice(self._data(), n, None) if n > 0 else _clip(self.it(), -n))
 
     def drop_while(self: Pype[T], pred: Fn[..., bool]) -> Pype[T]:
         """
@@ -773,27 +796,6 @@ class Pype(Generic[T]):
             return len(self._it)
 
         return sum(1 for _ in self._data())
-
-    def skip(self: Pype[T], n: int) -> Pype[T]:
-        """
-        Returns a pipe with the first ``n`` items missing:
-        ::
-
-            >>> list(pype([1, 2, 3, 4]).skip(2))
-            [3, 4]
-
-        :param n: number of items to skip
-        :return: pipe with ``n`` skipped items
-        :raises: ``TypeError`` if ``n`` is not an ``int``
-        :raises: ``ValueError`` if ``n`` is negative
-        """
-        require(isinstance(n, int), f'start needs to be an int but was [{type(n)}]')
-        require_val(n >= 0, f'start cannot be larger than end but was [{n}]')
-
-        if n == 0:
-            return self
-
-        return Pype(islice(self._data(), n, None))
 
     def slice(self: Pype[T], start: int, end: int) -> Pype[T]:
         """
@@ -1215,6 +1217,28 @@ def _accumulate(data: Iterable[T], func: Fn[[H, T], H], initial: Optional[H] = N
     for element in it:
         total = func(total, element)
         yield total
+
+
+def _clip(data: Iterator[T], n: int) -> Iterable[T]:
+    n_last = deque()
+
+    try:
+
+        for _ in range(n):
+            n_last.append(next(data))
+
+    except StopIteration:
+
+        return data
+
+    while True:
+        try:
+
+            n_last.append(next(data))
+            yield n_last.popleft()
+
+        except StopIteration:
+            break
 
 
 def _deferred_divide(data: Iterable[T], n: int) -> Iterator[Iterable[T]]:
