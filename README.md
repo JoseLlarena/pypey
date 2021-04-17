@@ -21,7 +21,7 @@ Supports argument unpacking:
 ```python
 >>> import os
 >>> from pypey import pype
->> # reads environment variables with "PYTHON" in them and prints their name
+>>>  # reads environment variables with "PYTHON" in them and prints their name
 >>> pype.dict(os.environ).select(lambda key, val: 'PYTHON' in key).pick(0).print()
 PYTHONPATH
 IPYTHONENABLE
