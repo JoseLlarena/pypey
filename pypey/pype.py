@@ -21,7 +21,6 @@ from pathos.multiprocessing import ProcessPool
 from collections.abc import Sized
 from functools import reduce
 from heapq import nlargest
-from inspect import signature, Parameter
 from itertools import chain, tee, accumulate, filterfalse, islice, dropwhile, takewhile, cycle, zip_longest
 from more_itertools import tail, random_permutation, ichunked, unique_everseen, side_effect, partition, unzip, \
     always_reversible
@@ -29,7 +28,7 @@ from pathlib import Path
 from sys import stdout
 from typing import Iterator, Iterable, Tuple, Generic, Union, Any, Optional, List, AnyStr, IO, Sequence, NamedTuple
 
-from pypey.func import Fn, ident, H, I, T, X, Z, require, require_val, pipe
+from pypey.func import Fn, ident, H, I, T, X, Z, require, require_val, pipe, _accurate_guess_num_args
 
 __all__ = ['Pype']
 
@@ -1398,32 +1397,15 @@ def _split_before(data: Iterable[T], pred: Fn[..., bool]) -> Iterator[List[T]]:
 
 
 def _unpack_fn(fn: Fn[..., T]) -> Fn[..., T]:
-    # These conditionals are necessary because a number of built-in functions throw exceptions when calling
-    # introspect.signature on them
+    require(callable(fn), f'this method takes a function but [{fn}] was found instead')
+    # These conditionals deal with built-in functions as they often don't have a __code__ attribute
     if fn in UNARY_WITHOUT_SIGNATURE or hasattr(fn, 'func') and fn.func in UNARY_WITHOUT_SIGNATURE:
         return fn
 
     if fn in N_ARY_WITHOUT_SIGNATURE or hasattr(fn, 'func') and fn.func in N_ARY_WITHOUT_SIGNATURE:
         return px(_unpacked_fn, fn=fn)
 
-    try:
-
-        params = signature(fn).parameters.values()
-
-    except ValueError as e:
-
-        if 'no signature found for builtin' in str(e):
-            logger.debug(f'cannot introspect signature of function [{fn}], unable to unpack items.')
-            return fn
-
-        raise e
-
-    num_args = len(tuple(filter(lambda par: par.default == par.empty and par.kind != Parameter.VAR_KEYWORD, params)))
-
-    if num_args <= 1:
-        return fn
-
-    return px(_unpacked_fn, fn=fn)
+    return fn if _accurate_guess_num_args(fn) <= 1 else px(_unpacked_fn, fn=fn)
 
 
 def _unpacked_fn(item: Any, fn: Fn[..., Z]) -> Z:
