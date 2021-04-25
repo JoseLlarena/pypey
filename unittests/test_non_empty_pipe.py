@@ -13,7 +13,7 @@ import sys
 
 from pypey import Pype, px, pype
 from unittests import _123_pype, _123, _654_pype, _654, _empty_pype, _a_fun_day_pype, _23, _aba_pype, _ab, \
-    _aAfunFUNdayDAY_pype
+    _aAfunFUNdayDAY_pype, with_seed
 
 
 def test_is_iterable():
@@ -239,14 +239,9 @@ def test_returns_items_elements_in_a_roundrobin_fashion():
     assert tuple(_a_fun_day_pype().roundrobin()) == ('a', 'f', 'd', 'u', 'a', 'n', 'y')
 
 
+@with_seed(42)
 def test_samples_items_with_current_seed():
-    s = random.getstate()
-
-    random.seed(42)
-
     assert tuple(_123_pype().sample(2)) == (3, 1)
-
-    random.setstate(s)
 
 
 def test_samples_items_with_given_seed():
@@ -257,14 +252,9 @@ def test_selects_items_that_fulfill_predicate():
     assert tuple(_123_pype().select(lambda n: n < 2)) == (1,)
 
 
+@with_seed(42)
 def test_shuffles_items_with_current_seed():
-    s = random.getstate()
-
-    random.seed(42)
-
     assert tuple(_123_pype().shuffle()) == (2, 1, 3)
-
-    random.setstate(s)
 
 
 def test_shuffles_items_with_given_seed():
