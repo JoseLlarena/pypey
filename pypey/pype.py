@@ -30,7 +30,7 @@ from typing import Iterator, Iterable, Tuple, Generic, Union, Any, Optional, Lis
 
 from pypey.func import Fn, ident, H, I, T, X, Z, require, require_val, pipe, _accurate_guess_num_args
 
-__all__ = ['Pype']
+__all__ = ['Pype', 'SPLIT_MODES']
 
 logger = getLogger(__name__)
 
@@ -76,7 +76,7 @@ class Pype(Generic[T]):
 
         :param it: an ``Iterable``
         """
-        self._it = it
+        self._it: Iterable[T] = it
 
     def __iter__(self: Pype[T]) -> Iterator[T]:
         """
@@ -190,9 +190,7 @@ class Pype(Generic[T]):
         :return: a copy of this pipe
         """
 
-        self._it, copy = tee(self._it)
-
-        return Pype(copy)
+        return Pype(self._data(teed=True))
 
     def cycle(self: Pype[T], n: Optional[int] = None) -> Pype[T]:
         """
@@ -228,7 +226,7 @@ class Pype(Generic[T]):
 
     def dist(self: Pype[T], n: int) -> Pype[Pype[T]]:
         """
-        Returns a pipe with ``n`` items being smaller pipes containing this pipe's elements distributed equally
+        Returns a pipe with ``n`` items, each being smaller pipes containing this pipe's elements distributed equally
         amongst them:
         ::
 
@@ -280,7 +278,7 @@ class Pype(Generic[T]):
             [[1, 2], [3, 4], [5, 6, 7]]
 
         If this pipe's size is smaller than ``n``, the resulting pipe will contain as many single-item pipes as there
-        are in it, followed by ``n``  minus this pipe's size empty pipes.
+        are in it, followed by ``n`` minus this pipe's size empty pipes.
         ::
 
             >>> [list(div) for div in pype([1, 2, 3]).divide(4)]
@@ -346,11 +344,10 @@ class Pype(Generic[T]):
         require(isinstance(workers, int), f'workers should be non-negative ints but where [{workers}]')
 
         ufn = _unpack_fn(fn)
-        data = self._data()
 
         if workers:
 
-            mapping = _parallel_map(px(self._data, True), ufn, workers)
+            mapping = _parallel_map(px(self._data, teed=False), ufn, workers)
 
             if now:
                 for _ in mapping:
@@ -359,6 +356,8 @@ class Pype(Generic[T]):
                 return self
 
             return Pype(side_effect(ident, mapping))
+
+        data = self._data()
 
         if now:
 
@@ -528,7 +527,7 @@ class Pype(Generic[T]):
         combo_fn = pipe(*map(_unpack_fn, (fn,) + other_fns))
 
         if workers:
-            return Pype(_parallel_map(px(self._data, True), combo_fn, workers))
+            return Pype(_parallel_map(px(self._data, False), combo_fn, workers))
 
         return Pype(map(combo_fn, self._data()))
 
@@ -712,7 +711,7 @@ class Pype(Generic[T]):
         :raises: ``TypeError`` if any of this pipe's items is not an ``Iterable``
         """
         # implementation based on ``more_itertools.interleave_longest``
-        return Pype(_deferred_roundrob(self._data()))
+        return Pype(_deferred_roundrobin(self._data()))
 
     def sample(self: Pype[T], k: int, seed_: Optional[Any] = None) -> Pype[T]:
         """
@@ -1192,9 +1191,9 @@ class Pype(Generic[T]):
 
         return self.map(lambda item: (item, _unpack_fn(fn)(item)))
 
-    def _data(self: Pype[T], should_tee: bool = False) -> Iterable[T]:
+    def _data(self: Pype[T], teed: bool = False) -> Iterable[T]:
 
-        if should_tee and not isinstance(self._it, Sized):
+        if teed and not isinstance(self._it, Sized):
             self._it, copy = tee(self._it)
             return copy
 
@@ -1206,9 +1205,8 @@ def _accumulate(data: Iterable[T], func: Fn[[H, T], H], initial: Optional[H] = N
     total = initial
 
     if initial is None:
-        try:
-            total = next(it)
-        except StopIteration:
+        total = next(it, _sent)
+        if total == _sent:
             return None
 
     yield total
@@ -1271,7 +1269,7 @@ def _deferred_reverse(data: Iterable[T]) -> Iterator[T]:
     yield from always_reversible(data)
 
 
-def _deferred_roundrob(data: Iterable[I]) -> Iterator[T]:
+def _deferred_roundrobin(data: Iterable[I]) -> Iterator[T]:
     yield from filterfalse(px(eq, _sent), flatten(zip_longest(*data, fillvalue=_sent)))
 
 
@@ -1336,14 +1334,14 @@ def _parallel_map(data_gen: Fn[[], Iterable[T]], fn: Fn[..., Z], workers: int) -
     try:
 
         with Pool(workers) as pool:
-            return pool.map(fn, data_gen())
+            yield from pool.map(fn, data_gen())
 
     except (PicklingError, AttributeError):
 
         logger.debug('multiprocessing with pickling failed, using pathos with dill instead.')
 
         with ProcessPool(workers) as pool:
-            return pool.map(fn, data_gen())
+            yield from pool.map(fn, data_gen())
 
 
 def _print_fn(item: T, ufn: Fn[..., Z], sep: str, end: str, file: IO, flush: bool):

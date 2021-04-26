@@ -50,11 +50,11 @@ def test_infinite_cycling_returns_empty_pipe():
     assert tuple(_empty_pype().cycle()) == ()
 
 
-def test_distributing_items_returns_pipe_with_empty_pipes():
+def test_distributing_items_returns_pipe_with_n_empty_pipes():  # FIXME  SHOULD THIS RETURN THE EMPTY PYPE ?
     assert tuple(map(tuple, tuple(_empty_pype().dist(3)))) == ((), (), ())
 
 
-def test_dividing_pipe_returns_a_pipe_with_empty_pipes():
+def test_dividing_pipe_returns_a_pipe_with_n_empty_pipes():  # FIXME  SHOULD THIS RETURN THE EMPTY PYPE ?
     assert tuple(map(tuple, tuple(_empty_pype().divide(3)))) == ((), (), ())
 
 
@@ -80,6 +80,14 @@ def test_produces_no_side_effect_when_run_in_parallel():
     assert tuple(_empty_pype().do(side_effect, now=True, workers=2)) == ()
 
     side_effect.assert_not_called()
+
+
+def test_dropping_first_n_items_returns_an_empty_pipe():
+    assert tuple(_empty_pype().drop(2)) == ()
+
+
+def test_dropping_last_n_items_returns_an_empty_pipe():
+    assert tuple(_empty_pype().drop(-1)) == ()
 
 
 def test_rejecting_items_until_condition_is_true_returns_empty_pipe():
@@ -108,14 +116,14 @@ def test_grouping_items_by_key_in_empty_pipe_returns_empty_pipe():
 
 def test_concise_iteration_is_not_possible():
     with raises(StopIteration):
-        next(_empty_pype().__iter__())
+        next(_empty_pype().it())
 
 
 def test_mapping_an_empty_pype_returns_an_empty_pipe():
     assert tuple(_empty_pype().map(lambda n: n * 2)) == ()
 
 
-def test_mapping_an_empty_pype_with_workers_returns_an_empty_pipe():
+def test_mapping_an_empty_pype_in_parallel_returns_an_empty_pipe():
     assert tuple(_empty_pype().map(lambda n: n * 2, workers=2)) == ()
 
 
@@ -136,7 +144,7 @@ def test_picking_iterable_items_key_in_an_empty_pipe_returns_an_empty_pipe():
 def test_does_not_print_anything():
     mock_stdout = Mock(spec_set=sys.stdout)
 
-    _empty_pype().print(file=mock_stdout, now=True)
+    _empty_pype().print(file=mock_stdout)
 
     mock_stdout.write.assert_not_called()
 
@@ -146,20 +154,19 @@ def test_reduces_to_init_value():
 
 
 def test_reducing_without_init_value_throws_exception():
-    """"""
     with raises(TypeError):
         _empty_pype().reduce(lambda summation, n: summation + n)
 
 
-def test_rejecting_items_that_fulfill_predicate_for_an_empty_pipe_returns_an_empty_pipe():
+def test_rejecting_items_that_fulfill_predicate_returns_an_empty_pipe():
     assert tuple(_empty_pype().reject(lambda n: n < 2)) == ()
 
 
-def test_reversing_an_empty_pipe_returns_an_empty_pipe():
+def test_reversing_returns_an_empty_pipe():
     assert tuple(_empty_pype().reverse()) == ()
 
 
-def test_roundrobbining_items_from_an_empty_pipe_returns_an_empty_pipe():
+def test_roundrobbining_items_returns_an_empty_pipe():
     assert tuple(_empty_pype().roundrobin()) == ()
 
 
@@ -167,7 +174,7 @@ def test_sampling_0_items_returns_empty_pipe():
     assert tuple(_empty_pype().sample(0)) == ()
 
 
-def test_sampling_more_than_0_items_throws_exception():
+def test_sampling_more_than_0_items_throws_exception(): # FIXME SHOULD THIS REALLY THROW AN EXCEPTION?
     """"""
     with raises(ValueError):
         tuple(_empty_pype().sample(1))
@@ -185,14 +192,6 @@ def test_size_is_zero():
     assert _empty_pype().size() == 0
 
 
-def test_dropping_first_n_items_returns_an_empty_pipe():
-    assert tuple(_empty_pype().drop(2)) == ()
-
-
-def test_dropping_last_n_items_returns_an_empty_pipe():
-    assert tuple(_empty_pype().drop(-1)) == ()
-
-
 def test_slicing_returns_an_empty_pipe():
     assert tuple(_empty_pype().slice(1, 2)) == ()
 
@@ -206,11 +205,11 @@ def test_splitting_pipe_returns_empty_pipe(mode):
     assert tuple(_empty_pype().split(lambda n: n < 2, mode=mode)) == ()
 
 
-def test_asking_for_the_head_of_an_empty_pipe_returns_an_empty_pipe():
+def test_asking_for_the_first_n_items_returns_an_empty_pipe():
     assert tuple(_empty_pype().take(1)) == ()
 
 
-def test_asking_for_tail_returns_empty_pipe():
+def test_asking_for_the_last_n_items_returns_empty_pipe():
     assert tuple(_empty_pype().take(-2)) == ()
 
 
@@ -233,7 +232,7 @@ def test_applies_functions_to_itself():
 def test_creates_file_but_does_not_write_anything_to_it(tmpdir):
     target = join(tmpdir, 'strings.txt')
 
-    _empty_pype().to_file(target, now=True)
+    _empty_pype().to_file(target)
 
     with open(target) as file:
         assert file.readlines() == []
