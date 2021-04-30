@@ -61,14 +61,12 @@ class Pype(Generic[T]):
 
     def __getstate__(self: Pype[T]) -> Iterable[T]:
         """
-        Returns the state of this pipe as a tuple if it's not an eager collection already. This stops ``Dill`` from
-        crashing due to long recursive calls, as it follows the object tree, when there are many instances  of
-        a pipe in a pipe.
+        Returns this pipe's backing ``Iterable`` as its state.
 
-        :return: this pipe's backing ``Iterable`` if it's eager or a ``tuple`` based on it if it's not
+        :return: this pipe's backing ``Iterable``
         """
 
-        return self._it if isinstance(self._it, Sized) else tuple(self._it)
+        return self._it
 
     def __init__(self: Pype[T], it: Iterable[T]):
         """
@@ -88,8 +86,7 @@ class Pype(Generic[T]):
 
     def __setstate__(self: Pype[T], state: Iterable[T]):
         """
-        Set this Pype's state to be the given iterable. This method is necessary because, and a counterpart of,
-        ``Pype.__get_state__``.
+        Set this Pype's state to be the given iterable. This method is a counterpart of ``Pype.__get_state__``.
 
         :param state: an iterable to be the state of this Pype
         :return: nothing
@@ -180,7 +177,7 @@ class Pype(Generic[T]):
 
     def clone(self: Pype[T]) -> Pype[T]:
         """
-        Lazily clones this pipe. This method tees the backing  ``Iterable`` and replaces it with a new copy.
+        Lazily clones this pipe. This method tees the backing ``Iterable`` and replaces it with a new copy.
 
         >>> list(pype([1, 2, 3]).clone())
         [1, 2, 3]
@@ -299,7 +296,7 @@ class Pype(Generic[T]):
 
         return Pype(map(Pype, _deferred_divide(self._data(), n)))
 
-    def do(self: Pype[T], fn: Fn[..., Any], *, now: bool = False, workers: int = 0) -> Pype[T]:
+    def do(self: Pype[T], fn: Fn[..., Any], *, now: bool = False, workers: int = 0, chunk_size: int = 100) -> Pype[T]:
         """
         Produces a side effect for each item, with the given function's return value ignored. It is typically used to
         execute an operation that is not functionally pure such as printing to console, updating a GUI, writing to disk
@@ -327,27 +324,31 @@ class Pype(Generic[T]):
 
         If ``workers`` is greater  than ``0`` the side effect will be parallelised using ``multiprocessing`` if
         possible, or ``pathos`` if not. ``pathos`` multiprocessing implementation is slower and limited vs the built-in
-        multiprocessing but it does allow using lambdas. When using workers, the backing ``Iterable`` is teed to avoid
-        consumption.
+        multiprocessing but it does allow using lambdas and local functions. When using workers, the backing
+        ``Iterable`` is teed to avoid consumption. Using a large ``chunk_size`` can greately speed up parallelisation;
+        it is ignored if ``workers`` is ``0``.
 
         Also known as ``for_each`` ``tap``, and ``sink``.
 
         Similar to ``more_itertools.side_effect``.
 
-        :param workers: number of extra processes to parallelise this method's side effect function
-        :param now: ``False`` to defer the side effect until iteration, ``True`` to write immediately
         :param fn: a function taking a possibly unpacked item
+        :param now: ``False`` to defer the side effect until iteration, ``True`` to write immediately
+        :param workers: number of extra processes to parallelise this method's side effect function
+        :param chunk_size: size of subsequence of ``Iterable`` to be processed by workers
         :return: this pipe
-        :raises: ``TypeError`` if ``fn`` is not a ``Callable`` or ``workers`` is not an ``int``
-        :raises: ``ValueError`` if ``workers`` is negative
+        :raises: ``TypeError`` if ``fn`` is not a ``Callable`` or ``workers`` or ``chunk_size`` are not ``int``
+        :raises: ``ValueError`` if ``workers`` is negative or ``chunk_size`` is non-positive
         """
-        require(isinstance(workers, int), f'workers should be non-negative ints but where [{workers}]')
+        require(isinstance(workers, int), f'workers should be non-negative ints but were [{workers}]')
+        require(isinstance(chunk_size, int), f'chunk size should be a positive int but was [{chunk_size}]')
+        require_val(chunk_size > 0, f'chunk size should be a positive int but was [{chunk_size}]')
 
         ufn = _unpack_fn(fn)
 
         if workers:
 
-            mapping = _parallel_map(px(self._data, teed=False), ufn, workers)
+            mapping = _parallel_map(self._data(), ufn, workers, chunk_size)
 
             if now:
                 for _ in mapping:
@@ -491,7 +492,8 @@ class Pype(Generic[T]):
         """
         return iter(self)
 
-    def map(self: Pype[T], fn: Fn[..., Z], *other_fns: Fn[..., X], workers: int = 0) -> Pype[Union[X, Z]]:
+    def map(self: Pype[T], fn: Fn[..., Z], *other_fns: Fn[..., X], workers: int = 0, chunk_size: int = 100) \
+            -> Pype[Union[X, Z]]:
         """
         Transforms this pipe's items according to the given function(s):
         ::
@@ -509,25 +511,29 @@ class Pype(Generic[T]):
         If ``workers`` is greater than ``0`` the mapping will be parallelised using ``multiprocessing`` if possible
         or ``pathos`` if not. ``pathos`` multiprocessing implementation is slower and has different limitations than the
         built-in multiprocessing but it does allow using lambdas. When using workers, the backing ``Iterable`` is teed
-        to avoid consumption.
+        to avoid consumption. Using a large ``chunk_size`` can greately speed up parallelisation; it is ignored if
+        ``workers`` is ``0``.
 
         Similar to built-in ``map``.
 
-        :param workers: number of extra processes to parallelise this method's mapping function(s)
         :param fn: a function taking a possibly unpacked item and returning a value
         :param other_fns: other functions to be chained with ``fn``, taking a possibly unpacked item and returning a
             value
+        :param workers: number of extra processes to parallelise this method's mapping function(s)
+        :param chunk_size: size of subsequence of ``Iterable`` to be processed by workers
         :return: a pipe with this pipe's items mapped to values
         :raises: ``TypeError`` if ``fn`` is not a ``Callable`` or ``other_fns`` is not a ``tuple`` of ``Callable`` or
-            if ``workers`` is not an ``int``
-        :raises: ``ValueError`` if ``workers`` is negative
+            if ``workers`` or ``chunk_size`` are not ``int``
+        :raises: ``ValueError`` if ``workers`` is negative or ``chunk_size`` is non-positive
         """
         require(isinstance(workers, int), f'workers should be non-negative ints but where [{workers}]')
+        require(isinstance(chunk_size, int), f'chunk size should be a positive int but was [{chunk_size}]')
+        require_val(chunk_size > 0, f'chunk size should be a positive int but was [{chunk_size}]')
 
         combo_fn = pipe(*map(_unpack_fn, (fn,) + other_fns))
 
         if workers:
-            return Pype(_parallel_map(px(self._data, False), combo_fn, workers))
+            return Pype(_parallel_map(self._data(), combo_fn, workers, chunk_size))
 
         return Pype(map(combo_fn, self._data()))
 
@@ -1008,7 +1014,6 @@ class Pype(Generic[T]):
             >>> list(pype.file(join(gettempdir(), '123.txt')))
             ['1', '2', '3']
 
-
         This method is intrinsically lazy but it's set to immediate/eager by default. As such, if ``now`` is set to
         ``True`` and the backing ``Iterable`` is lazy, it will be consumed and this method will return an empty pipe:
         ::
@@ -1330,18 +1335,23 @@ def _ncycles(data: Iterable[T], n: int) -> Iterator[T]:
         n_done += 1
 
 
-def _parallel_map(data_gen: Fn[[], Iterable[T]], fn: Fn[..., Z], workers: int) -> Iterable[Z]:
+def _parallel_map(data: Iterable[T], fn: Fn[..., Z], workers: int, chunk_size: int) -> Iterable[Z]:
     try:
+        # This tries to prevent the most common cause of PicklingError as that would lead to the consumption of `data`
+        # if it's lazy and then the imap in the except clause will get a `data` with missing items
+        func = fn.func if hasattr(fn, 'func') else fn
+        if '<lambda>' in func.__qualname__ or '<locals>' in func.__qualname__:
+            raise PicklingError
 
         with Pool(workers) as pool:
-            yield from pool.map(fn, data_gen())
+            yield from pool.imap(fn, data, chunksize=chunk_size)
 
     except (PicklingError, AttributeError):
 
-        logger.debug('multiprocessing with pickling failed, using pathos with dill instead.')
+        logger.debug('multiprocessing with pickle failed, using pathos with dill instead.')
 
         with ProcessPool(workers) as pool:
-            yield from pool.map(fn, data_gen())
+            yield from pool.imap(fn, data, chunksize=chunk_size)
 
 
 def _print_fn(item: T, ufn: Fn[..., Z], sep: str, end: str, file: IO, flush: bool):

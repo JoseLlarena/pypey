@@ -103,6 +103,19 @@ def test_side_effect_fails_with_negative_workers():
         tuple(_123_pype().do(lambda x: x * 2, workers=-1))
 
 
+@mark.parametrize('chunk_size', NON_INTS)
+def test_side_effect_fails_with_non_int_chunk_size(chunk_size):
+    """"""
+    with raises(TypeError):
+        tuple(_123_pype().do(lambda x: x * 2, workers=2, chunk_size=chunk_size))
+
+
+def test_side_effect_fails_with_non_positive_chunk_size():
+    """"""
+    with raises(ValueError):
+        tuple(_123_pype().do(lambda x: x * 2, workers=2, chunk_size=-1))
+
+
 @mark.parametrize('n', NON_INTS)
 def test_drop_fails_with_non_ints(n):
     """"""
@@ -175,6 +188,20 @@ def test_mapping_fails_with_negative_workers():
     """"""
     with raises(ValueError):
         tuple(_123_pype().map(lambda x: x * 2, workers=-1))
+
+
+@mark.parametrize('chunk_size', NON_INTS)
+def test_mapping_fails_with_non_int_chunk_size(chunk_size):
+    """"""
+    with raises(TypeError):
+        tuple(_123_pype().map(lambda x: x * 2, workers=2, chunk_size=chunk_size))
+
+
+def test_mapping_fails_with_non_positive_chunk_size():
+    """"""
+
+    with raises(ValueError):
+        tuple(_123_pype().map(lambda x: x * 2, workers=2, chunk_size=-1))
 
 
 @mark.parametrize('fn', NON_CALLABLES)
@@ -363,6 +390,12 @@ def test_asking_for_top_n_items_fails_with_non_callable_key(fn):
         tuple(_123_pype().top(1, fn))
 
 
+def test_unzipping_fails_with_non_iterable_items():
+    """"""
+    with raises(TypeError):
+        tuple(_123_pype().unzip())
+
+
 @mark.parametrize('size', NON_INTS)
 def test_sliding_window_over_items_fails_with_non_ints(size):
     """"""
@@ -374,12 +407,6 @@ def test_sliding_window_over_items_fails_with_negative_sizes():
     """"""
     with raises(ValueError):
         tuple(_123_pype().window(-1))
-
-
-def test_unzipping_fails_with_non_iterable_items():
-    """"""
-    with raises(TypeError):
-        tuple(_123_pype().unzip())
 
 
 @mark.parametrize('pipe', NON_PYPES)
