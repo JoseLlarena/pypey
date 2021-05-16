@@ -4,6 +4,7 @@ These tests specify behaviour of item unpacking logic for different signature ty
 
 from typing import Tuple
 
+from array import array
 from itertools import zip_longest
 from pytest import mark, raises
 
@@ -272,3 +273,15 @@ def test_unpacking_fails_for_keyword_only_variadic_signatures_and_non_iterable_i
 def test_unpacking_fails_for_keyword_only_variadic_signatures_and_iterable_items(fn: Fn):
     with raises(TypeError):
         _unpack_fn(fn)((1, 2))
+
+
+def test_unpacks_nary_built_in_functions_without_signature():
+    assert _unpack_fn(range)((1, 2)) == range(1, 2)
+
+
+def test_cant_unpack_nary_functions_without_signature():
+
+    assert _unpack_fn(array)('i', [1, 2, 3]) == array('i', [1, 2, 3])
+
+    with raises(TypeError):
+        assert _unpack_fn(array)(['i', [1, 2, 3]]) == array('i', [1, 2, 3])
