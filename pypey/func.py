@@ -118,7 +118,7 @@ def _fast_guess_num_args(fn: Fn[..., Any]) -> int:
 
     if hasattr(fn, '__code__'):
         return fn.__code__.co_argcount - len(fn.__defaults__ or ()) + 2 * ('args' in fn.__code__.co_varnames)
- 
+
     return num_args
 
 
@@ -127,7 +127,8 @@ def _accurate_guess_num_args(fn: Fn[..., Any]) -> int:
 
         spec = getfullargspec(fn)
 
-        return len([arg for arg in spec.args if arg != 'self']) - len(spec.defaults or []) + int(spec.varargs != None)
+        return len([arg for arg in spec.args if arg != 'self']) - len(spec.defaults or []) + 2 * (spec.varargs != None)
 
     except:
+
         return 1
