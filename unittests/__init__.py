@@ -1,6 +1,7 @@
 from typing import Tuple
 
-from pypey import Pype
+from pypey import Pype, Fn
+from random import seed, setstate, getstate
 
 _123 = 1, 2, 3
 _23 = _123[1:]
@@ -43,3 +44,17 @@ def _aAfunFUNdayDAY_pype() -> Pype[Tuple[str, str]]:
 
 def _aba_pype() -> Pype[str]:
     return Pype(iter('aba'))
+
+
+def with_seed(seed_: int) -> Fn:
+    def decorator(function: Fn) -> Fn:
+        def wrapper(*args, **kwargs):
+            s = getstate()
+            seed(seed_)
+            ret = function(*args, **kwargs)
+            setstate(s)
+            return ret
+
+        return wrapper
+
+    return decorator

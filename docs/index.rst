@@ -6,6 +6,7 @@ Pypey
    :caption: Contents:
 
    intro
+   modules
    api-reference
    license
 

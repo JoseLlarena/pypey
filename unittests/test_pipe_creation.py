@@ -42,7 +42,7 @@ def test_pipe_can_be_pickled_and_unpickled(tmpdir: str):
     bin_path = join(tmpdir, '246.bin')
 
     with open(bin_path, 'wb') as bin_file:
-        pickle.dump(_123_pype().map(lambda n: n * 2), bin_file)
+        pickle.dump(_123_pype().map(_x2), bin_file)
 
     with open(bin_path, 'rb') as bin_file:
         assert tuple(pickle.load(bin_file)) == tuple(map(lambda n: n * 2, _123))
@@ -59,3 +59,7 @@ def test_pipe_can_be_dilled_and_undilled(tmpdir: str):
 
     with open(bin_path, 'rb') as bin_file:
         assert tuple(dill.load(bin_file)) == tuple(map(lambda n: n * 2, _123))
+
+
+def _x2(n: int) -> int:
+    return n * 2

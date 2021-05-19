@@ -1,8 +1,16 @@
 # Changelog
 
-## [1.0.0](https://github.com/JoseLlarena/pypey/tree/1.0.0) (2021-03-02)
+## [2.0.0](https://github.com/josellarena/pypey/tree/2.0.0) (2021-05-19)
 
-[Full Changelog](https://github.com/JoseLlarena/pypey/compare/0e7d1f384caf972789c2b117e224ed5f97177cda...1.0.0)
+[Full Changelog](https://github.com/josellarena/pypey/compare/1.0.0...2.0.0)
+
+**Merged pull requests:**
+
+- Fixes and features [\#1](https://github.com/JoseLlarena/pypey/pull/1) ([JoseLlarena](https://github.com/JoseLlarena))
+
+## [1.0.0](https://github.com/josellarena/pypey/tree/1.0.0) (2021-03-02)
+
+[Full Changelog](https://github.com/josellarena/pypey/compare/125849fde18ef7244b5da70112031c786eda48c3...1.0.0)
 
 
 

@@ -14,11 +14,11 @@ or immediate:
 |            | :func:`~pypey.Pype.cycle`        |                                  |
 |            | :func:`~pypey.Pype.dist`         |                                  |
 |            | :func:`~pypey.Pype.do`           |                                  |
+|            | :func:`~pypey.Pype.drop`         |                                  |
 |            | :func:`~pypey.Pype.drop_while`   |                                  |
 |            | :func:`~pypey.Pype.enum`         |                                  |
 |            | :func:`~pypey.Pype.flat`         |                                  |
 |            | :func:`~pypey.Pype.flatmap`      |                                  |
-|            | :func:`~pypey.Pype.head`         |                                  |
 |            | :func:`~pypey.Pype.it`           |                                  |
 |            | :func:`~pypey.Pype.map`          |                                  |
 |            | :func:`~pypey.Pype.partition`    |                                  |
@@ -26,9 +26,9 @@ or immediate:
 |            | :func:`~pypey.Pype.print`        |                                  |
 |            | :func:`~pypey.Pype.reject`       |                                  |
 |            | :func:`~pypey.Pype.select`       |                                  |
-|            | :func:`~pypey.Pype.skip`         |                                  |
 |            | :func:`~pypey.Pype.slice`        |                                  |
 |            | :func:`~pypey.Pype.split`        |                                  |
+|            | :func:`~pypey.Pype.take`         |                                  |
 |            | :func:`~pypey.Pype.take_while`   |                                  |
 |            | :func:`~pypey.Pype.tee`          |                                  |
 |            | :func:`~pypey.Pype.to_file`      |                                  |
@@ -44,7 +44,7 @@ or immediate:
 |            | :func:`~pypey.Pype.sample`       |                                  |
 |            | :func:`~pypey.Pype.shuffle`      |                                  |
 |            | :func:`~pypey.Pype.sorted`       |                                  |
-|            | :func:`~pypey.Pype.tail`         |                                  |
+|            | :func:`~pypey.Pype.take`         |                                  |
 |            | :func:`~pypey.Pype.top`          |                                  |
 |            | :func:`~pypey.Pype.unzip`        |                                  |
 +------------+----------------------------------+----------------------------------+
@@ -55,10 +55,12 @@ defers its execution until it's iterated through, at which point, the backing ``
 :func:`~pypey.Pype.do`, :func:`~pypey.Pype.map`, :func:`~pypey.Pype.print` and  :func:`~pypey.Pype.to_file` are
 intrinsically lazy but they can be eager in certain circumstances. The three side-effectful methods
 :func:`~pypey.Pype.do`, :func:`~pypey.Pype.print` and :func:`~pypey.Pype.to_file` can be made eager by setting their
-``now`` parameter to ``True`` (:func:`~pypey.Pype.to_file`'s is ``True`` by default) as they are often the last
-operations in a pipeline, when consumption of its backing ``Iterable`` is warranted. :func:`~pypey.Pype.do` and
-:func:`~pypey.Pype.map` consume their iterables when they are made parallel, if their ``workers`` parameter is set to
-a value larger than ``0``.
+``now`` parameter to ``True`` (:func:`~pypey.Pype.to_file`'s and :func:`~pypey.Pype.print`'s are ``True`` by default)
+as they are often the last operations in a pipeline, when consumption of its backing ``Iterable`` is warranted.
+:func:`~pypey.Pype.do` and :func:`~pypey.Pype.map` consume their iterables when they are made parallel, if their
+``workers`` parameter is set to a value larger than ``0``.
+
+:func:`~pypey.Pype.take` is lazy when it's parameter is positive (head) and eager when it's negative (tail).
 
 In order to stop a lazy backing ``Iterable`` from being consumed, :func:`~pypey.Pype.clone` can be used to ensure that
 the consumption happens on the returned pipe and not the original one. :func:`~pypey.Pype.clone` manages this by
@@ -98,14 +100,13 @@ return a subset of the pipe's items:
 |               | :func:`~pypey.Pype.window`       |
 |               | :func:`~pypey.Pype.zip`          |
 +---------------+----------------------------------+
-|**Selections** | :func:`~pypey.Pype.drop_while`   |
-|               | :func:`~pypey.Pype.head`         |
+|**Selections** | :func:`~pypey.Pype.drop`         |
+|               | :func:`~pypey.Pype.drop_while`   |
 |               | :func:`~pypey.Pype.reject`       |
 |               | :func:`~pypey.Pype.sample`       |
 |               | :func:`~pypey.Pype.select`       |
-|               | :func:`~pypey.Pype.skip`         |
 |               | :func:`~pypey.Pype.slice`        |
-|               | :func:`~pypey.Pype.tail`         |
+|               | :func:`~pypey.Pype.take`         |
 |               | :func:`~pypey.Pype.take_while`   |
 |               | :func:`~pypey.Pype.top`          |
 |               | :func:`~pypey.Pype.uniq`         |
@@ -130,9 +131,8 @@ Some methods are just specialisations, or convenient versions of others:
 +----------------------------------+----------------------------------+
 | :func:`~pypey.Pype.select`       | :func:`~pypey.Pype.reject`       |
 +----------------------------------+----------------------------------+
-| :func:`~pypey.Pype.slice`        | :func:`~pypey.Pype.head`         |
-|                                  | :func:`~pypey.Pype.skip`         |
-|                                  | :func:`~pypey.Pype.tail`         |
+| :func:`~pypey.Pype.slice`        | :func:`~pypey.Pype.drop`         |
+|                                  | :func:`~pypey.Pype.take`         |
 +----------------------------------+----------------------------------+
 | :func:`~pypey.Pype.zip`          | :func:`~pypey.Pype.enum`         |
 +----------------------------------+----------------------------------+

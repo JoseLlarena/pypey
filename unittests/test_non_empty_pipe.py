@@ -2,7 +2,6 @@
 These tests specify an operation's effect on an non-empty pipe.
 """
 
-import random
 from collections import namedtuple
 from multiprocessing import Value
 from operator import add, neg
@@ -13,10 +12,10 @@ import sys
 
 from pypey import Pype, px, pype
 from unittests import _123_pype, _123, _654_pype, _654, _empty_pype, _a_fun_day_pype, _23, _aba_pype, _ab, \
-    _aAfunFUNdayDAY_pype
+    _aAfunFUNdayDAY_pype, with_seed
 
 
-def test_it_is_iterable():
+def test_can_be_iterated_through():
     pipe = iter(_123_pype())
 
     assert next(pipe) == _123[0]
@@ -40,13 +39,13 @@ def test_concatenation_with_an_empty_pipe_returns_this_pipe():
     assert tuple(_123_pype().cat(_empty_pype())) == _123
 
 
-def test_breaks_pipe_into_sub_pipes_of_at_most_given_number_of_items_if_pipe_is_no_smaller_than_number():
+def test_breaks_pipe_into_subpipes_of_at_most_the_given_number_of_items_if_pipe_is_no_smaller_than_number():
     chunks = tuple(_123_pype().chunk(2))
 
     assert tuple(map(tuple, chunks)) == ((1, 2), (3,))
 
 
-def test_breaks_pipe_into_sub_pipe_of_the_same_size_as_the_pipe_if_given_number_is_larger_than_pipe():
+def test_breaks_pipe_into_subpipe_of_the_same_size_as_the_pipe_if_given_number_is_larger_than_pipe():
     chunks = tuple(_123_pype().chunk(4))
 
     assert tuple(map(tuple, chunks)) == ((1, 2, 3),)
@@ -58,15 +57,15 @@ def test_clones_pipe():
     assert tuple(pipe.clone()) == tuple(pipe)
 
 
-def test_cycles_through_pipe_for_given_number_of_times():
+def test_cycles_through_pipe_for_the_given_number_of_times():
     assert tuple(_123_pype().cycle(n=3)) == _123 + _123 + _123
 
 
 def test_cycles_through_pipe_forever_if_not_given_number_of_times():
-    assert tuple(_123_pype().cycle().head(9)) == _123 + _123 + _123
+    assert tuple(_123_pype().cycle().take(9)) == _123 + _123 + _123
 
 
-def test_cycling_with_zero_number_of_times_returns_an_empty_pipe():
+def test_cycling_with_zero_number_of_times_returns_an_empty_pipe():  # FIXME SHOULD THIS BE ALLOWED?
     assert tuple(_123_pype().cycle(n=0)) == ()
 
 
@@ -116,13 +115,33 @@ def test_produces_a_side_effect_per_item_in_parallel():
     Mocks can't be pickled and only memory-shared objects which are global can be used in multiprocessing
     """
 
-    def side_effect(n: int):
-        with PARALLEL_SUM.get_lock():
-            PARALLEL_SUM.value += n
 
     _123_pype().do(side_effect, now=True, workers=2)
 
     assert PARALLEL_SUM.value == sum(_123)
+
+def side_effect(n: int):
+    with PARALLEL_SUM.get_lock():
+        PARALLEL_SUM.value += n
+
+def test_drops_the_given_number_of_first_items():
+    assert tuple(_123_pype().drop(1)) == (2, 3)
+
+
+def test_dropping_zero_items_returns_the_same_pipe():  # FIXME SHOULD THIS BE ALLOWED?
+    assert tuple(_123_pype().drop(0)) == (1, 2, 3)
+
+
+def test_dropping_more_first_items_than_there_are_in_pipe_is_the_same_as_dropping_as_many_as_there_are_in_it():
+    assert tuple(_123_pype().drop(10)) == ()
+
+
+def test_drops_the_given_number_of_last_items():
+    assert tuple(_123_pype().drop(-2)) == (1,)
+
+
+def test_dropping_more_last_items_than_there_are_in_pipe_is_the_same_as_dropping_as_many_as_there_are_in_it():
+    assert tuple(_123_pype().drop(-10)) == ()
 
 
 def test_rejects_items_until_condition_is_true():
@@ -133,7 +152,7 @@ def test_enumerates_items():
     assert tuple(_a_fun_day_pype().enum(start=1)) == ((1, 'a'), (2, 'fun'), (3, 'day'))
 
 
-def test_enumerates_items_with_swap_index():
+def test_enumerates_items_with_a_swapped_index():
     assert tuple(_a_fun_day_pype().enum(start=1, swap=True)) == (('a', 1), ('fun', 2), ('day', 3))
 
 
@@ -149,19 +168,7 @@ def test_groups_items_by_given_key():
     assert tuple(_a_fun_day_pype().group_by(len)) == ((1, ['a']), (3, ['fun', 'day']))
 
 
-def test_returns_the_first_n_items():
-    assert tuple(_123_pype().head(1)) == (1,)
-
-
-def test_returns_empty_pipe_when_asked_for_0_first_items():
-    assert tuple(_123_pype().head(0)) == ()
-
-
-def test_asking_for_more_first_items_than_size_is_the_same_as_asking_for_as_many_first_items_as_size():
-    assert tuple(_123_pype().head(10)) == tuple(_123_pype().head(3))
-
-
-def test_concisely_allows_iteration_through_elements():
+def test_can_be_iterated_through_concisely():
     pipe = _123_pype().it()
 
     assert next(pipe) == _123[0]
@@ -189,7 +196,7 @@ def test_picks_items_property():
     assert tuple(pipe.pick(Person.age)) == (11, 22, 33)
 
 
-def test_picks_items_key():
+def test_picks_items_elements_at_the_given_key():
     pipe = Pype(str(n) for n in _123)
 
     assert tuple(pipe.pick(0)) == ('1', '2', '3')
@@ -198,15 +205,15 @@ def test_picks_items_key():
 def test_prints_each_item_using_str():
     mock_stdout = Mock(spec_set=sys.stdout)
 
-    _a_fun_day_pype().print(file=mock_stdout, now=True)
+    _a_fun_day_pype().print(file=mock_stdout)
 
     mock_stdout.write.assert_has_calls([call('a'), call('\n'), call('fun'), call('\n'), call('day'), call('\n')])
 
 
-def test_it_prints_each_item_as_per_given_function():
+def test_prints_each_item_as_per_the_given_function():
     mock_stdout = Mock(spec_set=sys.stdout)
 
-    _123_pype().print(lambda n: f'n:{n}', file=mock_stdout, now=True)
+    _123_pype().print(lambda n: f'n:{n}', file=mock_stdout)
 
     mock_stdout.write.assert_has_calls([call('n:1'), call('\n'), call('n:2'), call('\n'), call('n:3'), call('\n')])
 
@@ -215,7 +222,7 @@ def test_reduces_items_to_single_value():
     assert _123_pype().reduce(lambda summation, n: summation + n) == sum(_123)
 
 
-def test_reduces_items_to_single_value_with_a_initial_item():
+def test_reduces_items_to_single_value_starting_with_a_initial_item():
     assert _123_pype().reduce(lambda summation, n: summation + n, init=-1) == sum(_23)
 
 
@@ -227,18 +234,13 @@ def test_reverses_pipe():
     assert tuple(_123_pype().reverse()) == (3, 2, 1)
 
 
-def test_returns_items_elements_in_a_roundrobin_fashion():
+def test_returns_iterable_items_elements_in_a_roundrobin_fashion():
     assert tuple(_a_fun_day_pype().roundrobin()) == ('a', 'f', 'd', 'u', 'a', 'n', 'y')
 
 
+@with_seed(42)
 def test_samples_items_with_current_seed():
-    s = random.getstate()
-
-    random.seed(42)
-
     assert tuple(_123_pype().sample(2)) == (3, 1)
-
-    random.setstate(s)
 
 
 def test_samples_items_with_given_seed():
@@ -249,45 +251,28 @@ def test_selects_items_that_fulfill_predicate():
     assert tuple(_123_pype().select(lambda n: n < 2)) == (1,)
 
 
+@with_seed(42)
 def test_shuffles_items_with_current_seed():
-    s = random.getstate()
-
-    random.seed(42)
-
     assert tuple(_123_pype().shuffle()) == (2, 1, 3)
-
-    random.setstate(s)
 
 
 def test_shuffles_items_with_given_seed():
     assert tuple(_123_pype().shuffle(seed_=42)) == (2, 1, 3)
 
 
-def test_returns_size_of_pipe():
+def test_returns_the_size_of_the_pipe():
     assert _123_pype().size() == len(_123)
 
 
-def test_skips_given_number_of_items():
-    assert tuple(_123_pype().skip(1)) == (2, 3)
-
-
-def test_skipping_zero_items_returns_the_same_pipe():
-    assert tuple(_123_pype().skip(0)) == (1, 2, 3)
-
-
-def test_skipping_more_items_than_there_are_in_pipe_is_the_same_as_skipping_as_many_as_there_are_in_it():
-    assert tuple(_123_pype().skip(10)) == ()
-
-
-def test_produces_slice_of_pipe():
+def test_produces_a_slice_of_the_pipe():
     assert tuple(_123_pype().slice(1, 2)) == (2,)
 
 
-def test_slicing_with_end_larger_than_size_is_the_same_as_end_equal_to_size():
+def test_slicing_with_end_larger_than_the_size_is_the_same_as_slicing_with_end_equal_to_the_size():
     assert tuple(_123_pype().slice(1, 3)) == tuple(_123_pype().slice(1, 4))
 
 
-def test_slicing_with_start_larger_than_size_returns_empty_pipe():
+def test_slicing_with_start_larger_than_the_size_returns_an_empty_pipe():
     assert tuple(_123_pype().slice(6, 7)) == ()
 
 
@@ -303,28 +288,46 @@ def test_sorts_items_with_key():
     assert tuple(_123_pype().sort(lambda n: -n)) == (3, 2, 1)
 
 
-def test_splits_pipeline():
-    assert tuple(map(tuple, _123_pype().split(lambda n: n == 2))) == ((1,), (2, 3,))
+def test_splits_pipeline_after_predicate_is_true():
+    assert tuple(map(tuple, _123_pype().split(lambda n: n == 2))) == ((1, 2), (3,))
 
 
-def test_produces_tail_of_pipe():
-    assert tuple(_123_pype().tail(2)) == _23
+def test_splits_pipeline_before_predicate_is_true():
+    assert tuple(map(tuple, _123_pype().split(lambda n: n == 2, mode='before'))) == ((1,), (2, 3,))
 
 
-def test_asking_for_more_last_items_than_size_is_the_same_as_asking_for_as_many_last_items_as_size():
-    assert tuple(_123_pype().tail(10)) == tuple(_123_pype().tail(3))
+def test_splits_pipeline_before_and_after_predicate_is_true_leaving_true_items_out():
+    assert tuple(map(tuple, _123_pype().split(lambda n: n == 2, mode='at'))) == ((1,), (3,))
+
+
+def test_produces_the_first_n_items():
+    assert tuple(_123_pype().take(1)) == (1,)
+
+
+def test_produces_empty_pipe_when_asked_for_first_0_items():
+    assert tuple(_123_pype().take(0)) == ()
+
+
+def test_asking_for_more_first_items_than_the_size_is_the_same_as_asking_for_as_many_first_items_as_the_size():
+    assert tuple(_123_pype().take(10)) == tuple(_123_pype().take(3))
+
+
+def test_produces_the_last_n_items():
+    assert tuple(_123_pype().take(-2)) == _23
+
+
+def test_asking_for_more_last_items_than_the_size_is_the_same_as_asking_for_as_many_last_items_as_the_size():
+    assert tuple(_123_pype().take(-10)) == tuple(_123_pype().take(-3))
 
 
 def test_selects_items_until_condition_is_true():
     assert tuple(_123_pype().take_while(lambda n: n < 3)) == (1, 2)
 
 
-def test_teeing_does_not_consume_pipe():
-    pipe = _123_pype()
+def test_produces_multiple_copies_of_itself():
+    copy1, copy2, copy3 = _123_pype().tee(3)
 
-    next(iter(next(iter(pipe.tee(3)))))
-
-    assert tuple(pipe) == _23
+    assert (tuple(copy1), tuple(copy2), tuple(copy3)) == (_123, _123, _123)
 
 
 def test_applies_function_to_itself():
@@ -347,12 +350,12 @@ def test_lazily_writes_items_to_file(tmpdir):
 def test_eagerly_writes_items_to_file(tmpdir):
     target = join(tmpdir, '123.txt')
 
-    pype = _123_pype().to_file(target, now=True)
+    pipe = _123_pype().to_file(target)
 
     with open(target) as target:
         assert target.readlines() == ['1\n', '2\n', '3\n']
 
-    assert tuple(pype) == ()
+    assert tuple(pipe) == ()
 
 
 def test_writes_items_to_file_without_line_terminator(tmpdir):
@@ -385,7 +388,7 @@ def test_creates_multiple_pipes_from_iterable_items_own_items():
     assert tuple(map(tuple, pairs.unzip())) == (lefts, rights)
 
 
-def test_sliding_window_of_size_0_returns_a_pipe_with_a_single_empty_window():
+def test_sliding_window_of_size_0_returns_a_pipe_with_a_single_empty_window():  # FIXME SHOULD THIS BE ALLOWED?
     assert tuple(map(tuple, _123_pype().window(0))) == ((),)
 
 
@@ -406,7 +409,7 @@ def test_zipping_with_a_pipe_of_different_size_returns_a_pipe_the_size_of_the_lo
            == ((1, 'f'), (2, 'u'), (3, 'n'), (4, 'n'), (4, 'y'))
 
 
-def test_self_zipping_when_items_have_the_same_size_returns_pipe_with_paired_items_elements():
+def test_self_zipping_when_items_have_the_same_size_returns_pipe_with_the_paired_items_elements():
     assert tuple(_aAfunFUNdayDAY_pype().zip()) == (('a', 'fun', 'day'), ('A', 'FUN', 'DAY'))
 
 
@@ -414,5 +417,5 @@ def test_self_zipping_with_different_sized_items_gives_pipe_with_items_the_size_
     assert tuple(_a_fun_day_pype().zip(trunc=False, pad='?')) == (('a', 'f', 'd'), ('?', 'u', 'a'), ('?', 'n', 'y'))
 
 
-def test_self_zipping_with_a_function_paires_items_with_output_of_functions():
+def test_self_zipping_with_a_function_pairs_items_with_output_of_said_function():
     assert tuple(_a_fun_day_pype().zip_with(len)) == (('a', 1), ('fun', 3), ('day', 3))

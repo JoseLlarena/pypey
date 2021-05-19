@@ -15,11 +15,12 @@ from collections import namedtuple
 from operator import add
 from os.path import join
 
-from pytest import raises
+from pytest import raises, mark
 
 from pypey import Pype
+from pypey.pype import SPLIT_MODES
 from unittests import _23, _123, _fun_day, _aba_pype, _112233_pype, _112233, _123_pype, _a_fun_day_pype, \
-    _aAfunFUNdayDAY_pype
+    _aAfunFUNdayDAY_pype, _654_pype, _654
 
 
 def test_accumulation_does_not_consume_whole_pipe():
@@ -40,12 +41,12 @@ def test_accumulation_with_initial_value_does_not_consume_whole_pipe():
 
 def test_concatenation_does_not_consume_either_pipe():
     pipe = _123_pype()
-    other_pipe = _123_pype()
+    other_pipe = _654_pype()
 
     next(iter(pipe.cat(other_pipe)))
 
     assert tuple(pipe) == _23
-    assert tuple(other_pipe) == _123
+    assert tuple(other_pipe) == _654
 
 
 def test_chunking_does_not_consume_pipe():
@@ -104,28 +105,42 @@ def test_side_effect_does_not_consume_pipe():
     assert tuple(pipe) == _23
 
 
-def test_parallel_lazy_side_effect_consumes_pipe_but_tees_it():
+def test_side_effect_fully_consumes_pipe_if_immediate():
+    pipe = _123_pype()
+
+    with raises(StopIteration):
+        next(iter(pipe.do(print, now=True)))
+
+
+def test_parallel_lazy_side_effect_consumes_pipe():
     pipe = _123_pype()
 
     next(iter(pipe.do(print, workers=2)))
 
-    assert tuple(pipe) == _123
-
-
-def test_side_effect_consumes_pipe_if_immediate():
-    pipe = _123_pype()
-
-    pipe.do(print, now=True)
-
     assert tuple(pipe) == ()
 
 
-def test_parallel_eager_side_effect_consumes_pipe_but_tees_it():
+def test_parallel_eager_side_effect_fully_consumes_pipe():
     pipe = _123_pype()
 
-    pipe.do(print, workers=2, now=True)
+    with raises(StopIteration):
+        next(iter(pipe.do(print, workers=2, now=True)))
 
-    assert tuple(pipe) == _123
+
+def test_dropping_the_first_items_does_not_consume_pipe():
+    pipe = _123_pype()
+
+    next(iter(pipe.drop(1)))
+
+    assert tuple(pipe) == (3,)
+
+
+def test_dropping_the_last_items_does_not_consume_pipe():
+    pipe = _123_pype()
+
+    next(iter(pipe.drop(-1)))
+
+    assert tuple(pipe) == (3,)
 
 
 def test_dropping_items_while_predicate_is_false_does_not_consume_pipe():
@@ -176,14 +191,6 @@ def test_grouping_by_key_consumes_pipe():
     assert tuple(pipe) == ()
 
 
-def test_asking_for_first_n_items_does_not_consume_pipe():
-    pipe = _123_pype()
-
-    next(iter(pipe.head(1)))
-
-    assert tuple(pipe) == _23
-
-
 def test_concise_iteration_does_not_consume_pipe():
     pipe = _123_pype()
 
@@ -200,12 +207,12 @@ def test_mapping_does_not_consume_pipe():
     assert tuple(pipe) == _23
 
 
-def test_parallel_mapping_does_not_consume_pipe_but_tees_it():
+def test_parallel_mapping_consumes_pipe():
     pipe = _123_pype()
 
-    next(iter(pipe.map(lambda x: x * 2, workers=2)))
+    next(iter(pipe.map(x2, workers=2)))
 
-    assert tuple(pipe) == _123
+    assert tuple(pipe) == ()
 
 
 def test_partitioning_does_not_consume_pipe():
@@ -234,11 +241,11 @@ def test_picking_a_key_does_not_consume_pipe():
     assert tuple(pipe) == ('2', '3')
 
 
-def test_eager_printing_consumes_pipe():
+def test_eager_printing_fully_consumes_pipe():
     pipe = _123_pype()
 
     with raises(StopIteration):
-        next(iter(pipe.print(now=True)))
+        next(iter(pipe.print()))
 
 
 def test_lazy_printing_does_not_consume_pipe():
@@ -254,8 +261,7 @@ def test_reducing_consumes_pipe():
 
     pipe.reduce(add)
 
-    with raises(StopIteration):
-        next(iter(pipe))
+    assert tuple(pipe) == ()
 
 
 def test_rejecting_items_does_not_consume_pipe():
@@ -274,7 +280,7 @@ def test_reversing_consumes_pipe():
     assert tuple(pipe) == ()
 
 
-def test_roundrobbining_consumes_pipe():
+def test_roundrobin_distribution_consumes_pipe():
     pipe = _a_fun_day_pype()
 
     next(iter(pipe.roundrobin()))
@@ -311,16 +317,7 @@ def test_asking_for_size_consumes_pipe():
 
     pipe.size()
 
-    with raises(StopIteration):
-        next(iter(pipe))
-
-
-def test_skipping_does_not_consume_pipe():
-    pipe = _123_pype()
-
-    next(iter(pipe.skip(1)))
-
-    assert tuple(pipe) == (3,)
+    assert tuple(pipe) == ()
 
 
 def test_slicing_does_not_consume_pipe():
@@ -339,18 +336,27 @@ def test_sorting_consumes_pipe():
     assert tuple(pipe) == ()
 
 
-def test_splitting_does_not_consume_pipe():
+@mark.parametrize('mode', SPLIT_MODES)
+def test_splitting_does_not_consume_pipe(mode):
     pipe = _123_pype()
 
-    next(iter(pipe.split(lambda n: n == 2)))
+    next(iter(pipe.split(lambda n: n == 2, mode=mode)))
 
     assert tuple(pipe) == (3,)
 
 
-def test_asking_for_last_n_items_does_not_consume_pipe():
+def test_asking_for_first_n_items_does_not_consume_pipe():
     pipe = _123_pype()
 
-    next(iter(pipe.tail(3)))
+    next(iter(pipe.take(1)))
+
+    assert tuple(pipe) == _23
+
+
+def test_asking_for_last_n_items_consumes_pipe():
+    pipe = _123_pype()
+
+    next(iter(pipe.take(-3)))
 
     assert tuple(pipe) == ()
 
@@ -395,11 +401,11 @@ def test_applying_functions_to_pipe_consumes_pipe_when_at_least_one_function_is_
     assert tuple(pipe) == ()
 
 
-def test_eager_writing_to_file_consumes_pipe(tmpdir):
+def test_eager_writing_to_file_fully_consumes_pipe(tmpdir):
     pipe = _123_pype()
 
     with raises(StopIteration):
-        next(iter(pipe.to_file(join(tmpdir, 'zip.txt'), now=True)))
+        next(iter(pipe.to_file(join(tmpdir, 'zip.txt'))))
 
 
 def test_lazy_writing_to_file_does_not_consume_pipe(tmpdir):
@@ -426,20 +432,20 @@ def test_asking_for_the_unique_items_does_not_consume_pipe():
     assert tuple(pipe) == ('b', 'a')
 
 
-def test_sliding_a_window_over_items_does_not_consume_pipe():
-    pipe = _123_pype()
-
-    next(iter(pipe.window(1)))
-
-    assert tuple(pipe) == (2, 3)
-
-
 def test_unzipping_does_not_consume_pipe():
     pipe = _112233_pype()
 
     next(iter(tuple(pipe.unzip())[0]))
 
     assert tuple(pipe) == _112233[1:]
+
+
+def test_sliding_a_window_over_items_does_not_consume_pipe():
+    pipe = _123_pype()
+
+    next(iter(pipe.window(1)))
+
+    assert tuple(pipe) == (2, 3)
 
 
 def test_zipping_does_not_consume_pipe():
@@ -466,3 +472,7 @@ def test_zipping_with_a_function_does_not_consume_pipe():
     next(iter(pipe.zip_with(len)))
 
     assert tuple(pipe) == _fun_day
+
+
+def x2(n: float) -> float:
+    return n * 2

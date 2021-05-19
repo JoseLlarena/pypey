@@ -103,6 +103,26 @@ def test_side_effect_fails_with_negative_workers():
         tuple(_123_pype().do(lambda x: x * 2, workers=-1))
 
 
+@mark.parametrize('chunk_size', NON_INTS)
+def test_side_effect_fails_with_non_int_chunk_size(chunk_size):
+    """"""
+    with raises(TypeError):
+        tuple(_123_pype().do(lambda x: x * 2, workers=2, chunk_size=chunk_size))
+
+
+def test_side_effect_fails_with_non_positive_chunk_size():
+    """"""
+    with raises(ValueError):
+        tuple(_123_pype().do(lambda x: x * 2, workers=2, chunk_size=-1))
+
+
+@mark.parametrize('n', NON_INTS)
+def test_drop_fails_with_non_ints(n):
+    """"""
+    with raises(TypeError):
+        tuple(_123_pype().drop(n))
+
+
 @mark.parametrize('fn', NON_CALLABLES)
 def test_rejecting_while_condition_is_true_fails_with_non_callables(fn):
     """"""
@@ -143,19 +163,6 @@ def test_grouping_fails_with_non_callable_keys(fn):
         tuple(_123_pype().group_by(fn))
 
 
-@mark.parametrize('n', NON_INTS)
-def test_asking_for_first_n_items_fails_with_non_int_n(n):
-    """"""
-    with raises(TypeError):
-        tuple(_123_pype().head(n))
-
-
-def test_asking_for_negative_first_items_fails():
-    """"""
-    with raises(ValueError):
-        tuple(_123_pype().head(-1))
-
-
 @mark.parametrize('fn', NON_CALLABLES)
 def test_mapping_fails_with_non_callable_function(fn):
     """"""
@@ -181,6 +188,20 @@ def test_mapping_fails_with_negative_workers():
     """"""
     with raises(ValueError):
         tuple(_123_pype().map(lambda x: x * 2, workers=-1))
+
+
+@mark.parametrize('chunk_size', NON_INTS)
+def test_mapping_fails_with_non_int_chunk_size(chunk_size):
+    """"""
+    with raises(TypeError):
+        tuple(_123_pype().map(lambda x: x * 2, workers=2, chunk_size=chunk_size))
+
+
+def test_mapping_fails_with_non_positive_chunk_size():
+    """"""
+
+    with raises(ValueError):
+        tuple(_123_pype().map(lambda x: x * 2, workers=2, chunk_size=-1))
 
 
 @mark.parametrize('fn', NON_CALLABLES)
@@ -233,19 +254,6 @@ def test_selecting_items_fails_with_non_callable_predicate(fn):
 
 
 @mark.parametrize('n', NON_INTS)
-def test_skipping_fails_with_non_ints(n):
-    """"""
-    with raises(TypeError):
-        tuple(_123_pype().skip(n))
-
-
-def test_skipping_fails_with_negatives():
-    """"""
-    with raises(ValueError):
-        tuple(_123_pype().skip(-1))
-
-
-@mark.parametrize('n', NON_INTS)
 def test_slicing_fails_with_non_int_start(n):
     """"""
     with raises(TypeError):
@@ -292,17 +300,24 @@ def test_splitting_fails_with_non_callable_predicate(fn):
         tuple(_123_pype().split(fn))
 
 
-@mark.parametrize('n', NON_INTS)
-def test_asking_for_last_n_items_fails_with_non_int_n(n):
+@mark.parametrize('mode', [1, 1., lambda n: n, [1, 2]])
+def test_splitting_fails_with_non_string_modes(mode):
     """"""
     with raises(TypeError):
-        tuple(_123_pype().tail(n))
+        tuple(_123_pype().split(lambda n: n == 2, mode=mode))
 
 
-def test_asking_for_negative_last_items_fails():
+def test_splitting_fails_with_unsupported_modes():
     """"""
     with raises(ValueError):
-        tuple(_123_pype().tail(-1))
+        tuple(_123_pype().split(lambda n: n == 2, mode='non-existent'))
+
+
+@mark.parametrize('n', NON_INTS)
+def test_asking_for_first_or_last_n_items_fails_with_non_int_n(n):
+    """"""
+    with raises(TypeError):
+        tuple(_123_pype().take(n))
 
 
 @mark.parametrize('fn', NON_CALLABLES)
@@ -375,6 +390,12 @@ def test_asking_for_top_n_items_fails_with_non_callable_key(fn):
         tuple(_123_pype().top(1, fn))
 
 
+def test_unzipping_fails_with_non_iterable_items():
+    """"""
+    with raises(TypeError):
+        tuple(_123_pype().unzip())
+
+
 @mark.parametrize('size', NON_INTS)
 def test_sliding_window_over_items_fails_with_non_ints(size):
     """"""
@@ -386,12 +407,6 @@ def test_sliding_window_over_items_fails_with_negative_sizes():
     """"""
     with raises(ValueError):
         tuple(_123_pype().window(-1))
-
-
-def test_unzipping_fails_with_non_iterable_items():
-    """"""
-    with raises(TypeError):
-        tuple(_123_pype().unzip())
 
 
 @mark.parametrize('pipe', NON_PYPES)

@@ -1,4 +1,5 @@
 from functools import partial
+from inspect import getfullargspec
 from typing import Any, Callable, TypeVar, Iterable, Type, Tuple, _VariadicGenericAlias
 
 __all__ = ['Fn', 'H', 'I', 'K', 'T', 'V', 'X', 'Z', 'px', 'ident', 'pipe', 'require', 'require_val', 'throw']
@@ -12,9 +13,9 @@ X = TypeVar('X')
 Z = TypeVar('Z')
 
 #:
-Fn: _VariadicGenericAlias = Callable # Concise alias of ``typing.Callable``
+Fn: _VariadicGenericAlias = Callable  # Concise alias of ``typing.Callable``
 #:
-px: Callable[..., Callable] = partial # Concise alias of ``functools.partial``
+px: Callable[..., Callable] = partial  # Concise alias of ``functools.partial``
 
 
 def ident(item: T) -> T:
@@ -40,6 +41,10 @@ def pipe(*functions: Fn[..., Any]) -> Fn[[Any], Any]:
     :param functions: a variable number of function arguments
     :return: a combined function
     """
+
+    if len(functions) == 1:
+        return functions[0]
+
     return px(_pipe_functions, functions=functions)
 
 
@@ -98,11 +103,32 @@ def throw(exception: Type[Exception], message: str):
     raise exception(message)
 
 
-def _pipe_functions(arg: Any, functions: Tuple[Fn[..., Any], ...]) -> Any:
+def _pipe_functions(*arg: Any, functions: Tuple[Fn[..., Any], ...]) -> Any:
     # created as global function to avoid issues with multiprocessing
-    result = arg
+    result = arg if len(arg) > 1 else arg[0]
 
     for fn in functions:
-        result = fn(result)
+        result = fn(*result) if _fast_guess_num_args(fn) > 1 and hasattr(result, '__iter__') else fn(result)
 
     return result
+
+
+def _fast_guess_num_args(fn: Fn[..., Any]) -> int:
+    num_args = 1
+
+    if hasattr(fn, '__code__'):
+        return fn.__code__.co_argcount - len(fn.__defaults__ or ()) + 2 * ('args' in fn.__code__.co_varnames)
+
+    return num_args
+
+
+def _accurate_guess_num_args(fn: Fn[..., Any]) -> int:
+    try:
+
+        spec = getfullargspec(fn)
+
+        return len([arg for arg in spec.args if arg != 'self']) - len(spec.defaults or []) + 2 * (spec.varargs != None)
+
+    except:
+
+        return 1

@@ -1,7 +1,7 @@
 """
 These tests specify whether an operation's effect is deferred after invocation returns and items are iterated through.
 
-The way deferral is verified is by invoking the operation and then checking whether the original fixture pipe and its
+The way deferral is verified is by invoking the operation and then checking whether the original pipe and its
 backing lazy collection have been consumed and the operation's effect has been evaluated.
 
 Note that this does not verify laziness, ie, the the ability of an operation to be applied incrementally, one item at
@@ -10,11 +10,12 @@ are lazy. Laziness is tested in `test_execution_laziness.py`.
 
 """
 from collections import namedtuple
-from math import sqrt
 from operator import add
 from os.path import join
 
-from pypey.pype import Pype
+from pytest import mark
+
+from pypey.pype import Pype, SPLIT_MODES
 from unittests import _123, _123_pype, _a_fun_day, _aba_pype, _aba, _112233_pype, _112233, _a_fun_day_pype
 
 
@@ -100,14 +101,6 @@ def test_side_effect_can_be_deferred():
     assert tuple(pipe) == _123
 
 
-def test_parallel_side_effect_can_be_deferred():
-    pipe = _123_pype()
-
-    pipe.do(print, workers=2)
-
-    assert tuple(pipe) == _123
-
-
 def test_side_effect_can_be_made_immediate():
     pipe = _123_pype()
 
@@ -116,14 +109,34 @@ def test_side_effect_can_be_made_immediate():
     assert tuple(pipe) == ()
 
 
+def test_parallel_side_effect_can_be_deferred():
+    pipe = _123_pype()
+
+    pipe.do(print, workers=2)
+
+    assert tuple(pipe) == _123
+
+
 def test_parallel_side_effect_can_be_made_immediate():
-    """
-    This test doesn't really test deferral because the backing Iterable is teed.
-    I can't think of a way to test it properly.
-    """
     pipe = _123_pype()
 
     pipe.do(print, now=True, workers=2)
+
+    assert tuple(pipe) == ()
+
+
+def test_dropping_first_items_is_deferred():
+    pipe = _123_pype()
+
+    pipe.drop(1)
+
+    assert tuple(pipe) == _123
+
+
+def test_dropping_last_items_is_deferred():
+    pipe = _123_pype()
+
+    pipe.drop(-1)
 
     assert tuple(pipe) == _123
 
@@ -176,14 +189,6 @@ def test_grouping_by_key_is_deferred():
     assert tuple(pipe) == _a_fun_day
 
 
-def test_asking_for_first_n_items_is_deferred():
-    pipe = _123_pype()
-
-    pipe.head(1)
-
-    assert tuple(pipe) == _123
-
-
 def test_concise_iteration_is_deferred():
     pipe = _123_pype()
 
@@ -200,11 +205,7 @@ def test_mapping_is_deferred():
     assert tuple(pipe) == _123
 
 
-def test_parallel_mapping_is_immediate_but_teed():
-    """
-    This test doesnt really test deferral because the backing Iterable is teed.
-    I can't think of a way to test it properly.
-    """
+def test_parallel_mapping_is_deferred():
     pipe = _123_pype()
 
     pipe.map(lambda x: x * 2, workers=2)
@@ -241,7 +242,7 @@ def test_picking_a_key_is_deferred():
 def test_eager_printing_is_immediate():
     pipe = _123_pype()
 
-    pipe.print(now=True)
+    pipe.print()
 
     assert tuple(pipe) == ()
 
@@ -278,7 +279,7 @@ def test_reversing_is_deferred():
     assert tuple(pipe) == _123
 
 
-def test_roundrobbining_is_deferred():
+def test_distributing_roundrobin_is_deferred():
     pipe = _a_fun_day_pype()
 
     pipe.roundrobin()
@@ -318,14 +319,6 @@ def test_returning_size_is_immediate():
     assert tuple(pipe) == ()
 
 
-def test_skipping_is_deferred():
-    pipe = _123_pype()
-
-    pipe.skip(1)
-
-    assert tuple(pipe) == _123
-
-
 def test_slicing_is_deferred():
     pipe = _123_pype()
 
@@ -342,10 +335,19 @@ def test_sorting_is_deferred():
     assert tuple(pipe) == _123
 
 
-def test_splitting_is_deferred():
+@mark.parametrize('mode', SPLIT_MODES)
+def test_splitting_is_deferred(mode):
     pipe = _123_pype()
 
-    pipe.split(lambda n: n == 2)
+    pipe.split(lambda n: n == 2, mode=mode)
+
+    assert tuple(pipe) == _123
+
+
+def test_asking_for_first_n_items_is_deferred():
+    pipe = _123_pype()
+
+    pipe.take(1)
 
     assert tuple(pipe) == _123
 
@@ -353,7 +355,7 @@ def test_splitting_is_deferred():
 def test_asking_for_last_n_items_is_deferred():
     pipe = _123_pype()
 
-    pipe.tail(1)
+    pipe.take(-1)
 
     assert tuple(pipe) == _123
 
@@ -401,7 +403,7 @@ def test_applying_function_to_pipe_is_immediate_when_at_least_one_function_is_ea
 def test_eager_writing_to_file_is_immediate(tmpdir):
     pipe = _123_pype()
 
-    pipe.to_file(join(tmpdir, 'zip.txt'), now=True)
+    pipe.to_file(join(tmpdir, 'zip.txt'))
 
     assert tuple(pipe) == ()
 
@@ -430,20 +432,20 @@ def test_asking_for_the_unique_items_is_deferred():
     assert tuple(pipe) == _aba
 
 
-def test_sliding_a_window_over_items_is_deferred():
-    pipe = _123_pype()
-
-    pipe.window(2)
-
-    assert tuple(pipe) == _123
-
-
 def test_unzipping_is_deferred():
     pipe = _112233_pype()
 
     pipe.unzip()
 
     assert tuple(pipe) == _112233
+
+
+def test_sliding_a_window_over_items_is_deferred():
+    pipe = _123_pype()
+
+    pipe.window(2)
+
+    assert tuple(pipe) == _123
 
 
 def test_zipping_is_deferred():
