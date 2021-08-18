@@ -195,6 +195,8 @@ Nvidia's `Streamz <https://streamz.readthedocs.io/en/latest>`_ is in the same sp
 and adds support for `Pandas <https://github.com/pandas-dev/pandas>`_ and `cuDF <https://docs.rapids.ai/api/cudf/stable>`_.
 `Apache Beam <https://github.com/apache/beam/blob/master/sdks/python/apache_beam/examples/wordcount_minimal.py>`_ combines batch- and stream-processing and supports
 different backends like `Spark <http://spark.apache.org>`_, and uses function-chaining with operator overloading.
+Tensorflow's `Dataset <https://www.tensorflow.org/api_docs/python/tf/data/Dataset>`_ class is an method-chaining API
+focussed on loading tensors.
 
 `Riko <https://github.com/nerevu/riko/blob/master/docs/FAQ.rst#what-pipes-are-available>`_ is also an object-based+method-chaining
 type of API but specialises in structured text processing.

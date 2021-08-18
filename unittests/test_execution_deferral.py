@@ -35,20 +35,36 @@ def test_accumulation_with_initial_value_is_deferred():
     assert tuple(pipe) == _123
 
 
-def test_concatenation_is_deferred():
+def test_broadcasting_is_deferred():
     pipe = _123_pype()
-    other_pipe = _123_pype()
 
-    pipe.cat(other_pipe)
+    _123_pype().broadcast(range)
 
     assert tuple(pipe) == _123
-    assert tuple(other_pipe) == _123
+
+
+def test_concatenation_is_deferred():
+    pipe = _123_pype()
+    other = _123_pype()
+
+    pipe.cat(other)
+
+    assert tuple(pipe) == _123
+    assert tuple(other) == _123
 
 
 def test_chunking_is_deferred():
     pipe = _123_pype()
 
     pipe.chunk(2)
+
+    assert tuple(pipe) == _123
+
+
+def test_chunking_with_multiple_sizes_is_deferred():
+    pipe = _123_pype()
+
+    pipe.chunk([1, 2])
 
     assert tuple(pipe) == _123
 
@@ -149,6 +165,14 @@ def test_drop_while_is_deferred():
     assert tuple(pipe) == _123
 
 
+def test_eager_making_is_immediate():
+    pipe = _123_pype()
+
+    pipe.eager()
+
+    assert tuple(pipe) == ()
+
+
 def test_enumeration_is_deferred():
     pipe = _123_pype()
 
@@ -181,12 +205,28 @@ def test_flatmapping_is_deferred():
     assert tuple(pipe) == _a_fun_day
 
 
+def test_computing_item_frequencies_is_deferred():
+    pipe = _a_fun_day_pype()
+
+    pipe.freqs()
+
+    assert tuple(pipe) == _a_fun_day
+
+
 def test_grouping_by_key_is_deferred():
     pipe = _a_fun_day_pype()
 
     pipe.group_by(len)
 
     assert tuple(pipe) == _a_fun_day
+
+
+def test_interleaves_items_with_other_iterable_is_deferred():
+    pipe = _123_pype()
+
+    pipe.interleave(_a_fun_day_pype(), trunc=False)
+
+    assert tuple(pipe) == _123
 
 
 def test_concise_iteration_is_deferred():
@@ -416,6 +456,14 @@ def test_lazy_writing_to_file_is_deferred(tmpdir):
     assert tuple(pipe) == _123
 
 
+def test_writing_to_json_file_consumes_pipe(tmpdir):
+    pipe = Pype((k, v) for k, v in [('a', 1), ('fun', 2), ('day', 3)])
+
+    pipe = pipe.to_json(join(tmpdir, 'object.json'))
+
+    assert tuple(pipe) == ()
+
+
 def test_asking_for_top_n_items_is_deferred():
     pipe = _123_pype()
 
@@ -450,12 +498,12 @@ def test_sliding_a_window_over_items_is_deferred():
 
 def test_zipping_is_deferred():
     pipe = _123_pype()
-    other_pipe = _123_pype()
+    other = _123_pype()
 
-    pipe.zip(other_pipe)
+    pipe.zip(other)
 
     assert tuple(pipe) == _123
-    assert tuple(other_pipe) == _123
+    assert tuple(other) == _123
 
 
 def test_self_zipping_is_deferred():

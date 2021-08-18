@@ -2,6 +2,7 @@
 These tests specify an operation's effect on an non-empty pipe.
 """
 
+import json
 from collections import namedtuple
 from multiprocessing import Value
 from operator import add, neg
@@ -10,7 +11,7 @@ from unittest.mock import Mock, call, create_autospec
 
 import sys
 
-from pypey import Pype, px, pype
+from pypey import Pype, px, pype, TOTAL
 from unittests import _123_pype, _123, _654_pype, _654, _empty_pype, _a_fun_day_pype, _23, _aba_pype, _ab, \
     _aAfunFUNdayDAY_pype, with_seed
 
@@ -31,11 +32,15 @@ def test_accumulates_values_across_items_with_initial_value():
     assert tuple(_123_pype().accum(add, -1)) == (-1, 0, 2, 5)
 
 
-def test_concatenates_with_another_pipe():
+def test_broadcasts_items_to_iterables():
+    assert tuple(_123_pype().broadcast(range)) == ((1, 0), (2, 0), (2, 1), (3, 0), (3, 1), (3, 2))
+
+
+def test_concatenates_with_another_iterable():
     assert tuple(_123_pype().cat(_654_pype())) == _123 + _654
 
 
-def test_concatenation_with_an_empty_pipe_returns_this_pipe():
+def test_concatenation_with_an_empty_iterable_returns_this_pipe():
     assert tuple(_123_pype().cat(_empty_pype())) == _123
 
 
@@ -49,6 +54,24 @@ def test_breaks_pipe_into_subpipe_of_the_same_size_as_the_pipe_if_given_number_i
     chunks = tuple(_123_pype().chunk(4))
 
     assert tuple(map(tuple, chunks)) == ((1, 2, 3),)
+
+
+def test_breaks_pipe_into_subpipes_of_the_given_sizes():
+    chunks = tuple(_123_pype().chunk([1, 2]))
+
+    assert tuple(map(tuple, chunks)) == ((1,), (2, 3))
+
+
+def test_breaks_pipe_into_subpipes_of_the_given_sizes_dropping_items_if_sum_of_sizes_is_smaller_than_length():
+    chunks = tuple(_123_pype().chunk([1, 1]))
+
+    assert tuple(map(tuple, chunks)) == ((1,), (2,))
+
+
+def test_breaks_pipe_into_subpipes_of_the_given_sizes_or_smaller_if_sum_of_sizes_is_greater_than_length():
+    chunks = tuple(_123_pype().chunk([1, 2, 3]))
+
+    assert tuple(map(tuple, chunks)) == ((1,), (2, 3), ())
 
 
 def test_clones_pipe():
@@ -115,14 +138,15 @@ def test_produces_a_side_effect_per_item_in_parallel():
     Mocks can't be pickled and only memory-shared objects which are global can be used in multiprocessing
     """
 
-
     _123_pype().do(side_effect, now=True, workers=2)
 
     assert PARALLEL_SUM.value == sum(_123)
 
+
 def side_effect(n: int):
     with PARALLEL_SUM.get_lock():
         PARALLEL_SUM.value += n
+
 
 def test_drops_the_given_number_of_first_items():
     assert tuple(_123_pype().drop(1)) == (2, 3)
@@ -148,6 +172,14 @@ def test_rejects_items_until_condition_is_true():
     assert tuple(_123_pype().drop_while(lambda n: n != 2)) == _23
 
 
+def test_makes_pipe_eager():
+    pipe = _123_pype().eager()
+
+    pipe.size()
+
+    assert pipe.size() == 3
+
+
 def test_enumerates_items():
     assert tuple(_a_fun_day_pype().enum(start=1)) == ((1, 'a'), (2, 'fun'), (3, 'day'))
 
@@ -164,8 +196,44 @@ def test_transforms_iterable_items_and_flattens_them_into_a_pipe_of_elements():
     assert tuple(_a_fun_day_pype().flatmap(str.upper)) == ('A', 'F', 'U', 'N', 'D', 'A', 'Y')
 
 
+def test_computes_item_frequencies_with_total():
+    pipe = pype('AFUNDAY')
+
+    assert tuple(pipe.freqs()) == (('A', 2, 2 / 7),) + tuple((char, 1, 1 / 7) for char in 'FUNDY') + ((TOTAL, 7, 1.),)
+
+
+def test_computes_item_frequencies_without_total():
+    pipe = pype('AFUNDAY')
+
+    assert tuple(pipe.freqs(total=False)) == (('A', 2, 2 / 7),) + tuple((char, 1, 1 / 7) for char in 'FUNDY')
+
+
 def test_groups_items_by_given_key():
     assert tuple(_a_fun_day_pype().group_by(len)) == ((1, ['a']), (3, ['fun', 'day']))
+
+
+def test_interleaves_items_with_other_iterable():
+    assert tuple(_123_pype().interleave(_a_fun_day_pype())) == (1, 'a', 2, 'fun', 3, 'day')
+
+
+def test_interleaves_items_with_other_iterable_truncating_to_shortest():
+    assert tuple(_123_pype().interleave(_a_fun_day_pype(), n=2)) == (1, 2, 'a', 3, 'fun')
+
+
+def test_interleaves_items_with_other_iterable_skipping_items_if_other_pipe_is_exhausted():
+    assert tuple(_123_pype().interleave(_a_fun_day_pype(), n=2, trunc=False)) == (1, 2, 'a', 3, 'fun', 'day')
+
+
+def test_interleaves_items_with_other_iterable_skipping_items_this_pipe_is_exhausted():
+    assert tuple(_123_pype().interleave(['a', 'fun', 'fun', 'day'], trunc=False)) == (1, 'a', 2, 'fun', 3, 'fun', 'day')
+
+
+def test_interleaving_with_an_empty_iterable_skipping_items_returns_this_pipe():
+    assert tuple(_123_pype().interleave(_empty_pype(), trunc=False)) == _123
+
+
+def test_interleaving_with_an_empty_iterable_with_truncation_returns_an_empty_pipe():
+    assert tuple(_123_pype().interleave(_empty_pype(), trunc=True)) == ()
 
 
 def test_can_be_iterated_through_concisely():
@@ -365,6 +433,33 @@ def test_writes_items_to_file_without_line_terminator(tmpdir):
 
     with open(target) as target:
         assert target.readlines() == ['123']
+
+
+def test_writes_pairs_to_json_file_as_object(tmpdir):
+    target = join(tmpdir, 'object.json')
+
+    Pype([('a', 1), ('fun', 2), ('day', 3)]).to_json(target)
+
+    with open(target) as file:
+        assert json.load(file) == {'a': 1, 'fun': 2, 'day': 3}
+
+
+def test_writes_pairs_to_json_file_as_list(tmpdir):
+    target = join(tmpdir, 'list.json')
+
+    Pype([('a', 1), ('fun', 2), ('day', 3)]).to_json(target, as_dict=False)
+
+    with open(target) as file:
+        assert json.load(file) == [['a', 1], ['fun', 2], ['day', 3]]
+
+
+def test_writes_items_to_json_file_as_list(tmpdir):
+    target = join(tmpdir, 'list.json')
+
+    Pype(['a', 'fun', 'day']).to_json(target, as_dict=False)
+
+    with open(target) as file:
+        assert json.load(file) == ['a', 'fun', 'day']
 
 
 def test_finds_top_items():

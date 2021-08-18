@@ -1,8 +1,7 @@
 from functools import partial
-from inspect import getfullargspec
-from typing import Any, Callable, TypeVar, Iterable, Type, Tuple, _VariadicGenericAlias
+from typing import Any, Callable as Fn, TypeVar, Iterable, Type, Tuple
 
-__all__ = ['Fn', 'H', 'I', 'K', 'T', 'V', 'X', 'Z', 'px', 'ident', 'pipe', 'require', 'require_val', 'throw']
+__all__ = ['Fn', 'H', 'I', 'K', 'T', 'V', 'X', 'Y', 'px', 'ident', 'pipe', 'require', 'require_val', 'throw']
 
 H = TypeVar('H', Any, Any)
 I = TypeVar('I', bound=Iterable)
@@ -10,12 +9,10 @@ K = TypeVar('K')
 T = TypeVar('T')
 V = TypeVar('V')
 X = TypeVar('X')
-Z = TypeVar('Z')
+Y = TypeVar('Y')
 
 #:
-Fn: _VariadicGenericAlias = Callable  # Concise alias of ``typing.Callable``
-#:
-px: Callable[..., Callable] = partial  # Concise alias of ``functools.partial``
+px: Fn[..., Fn] = partial  # Concise alias of ``functools.partial``
 
 
 def ident(item: T) -> T:
@@ -28,17 +25,43 @@ def ident(item: T) -> T:
     return item
 
 
-def pipe(*functions: Fn[..., Any]) -> Fn[[Any], Any]:
+def pipe(*functions: Fn) -> Fn:
     """
-    Chains given functions. The first function can take any number of arguments, but the following ones must take
-    a single argument.
+    Chains given functions.
+    ::
 
-    >>> from pypey import pipe
-    >>> from math import sqrt
-    >>> [pipe(len, sqrt)(w) for w in ('a', 'fun','day')]
-    [1.0, 1.7320508075688772, 1.7320508075688772]
+        >>> from pypey import pipe
+        >>> from math import sqrt
+        >>> [pipe(len, sqrt)(w) for w in ('a', 'fun','day')]
+        [1.0, 1.7320508075688772, 1.7320508075688772]
 
-    :param functions: a variable number of function arguments
+    For functions taking multiple arguments, the return of the previous function in the chain
+    will be unpacked only if it's a ``tuple``:
+    ::
+
+        >>> from pypey import pipe
+        >>> pipe(divmod, lambda quotient, remainder: quotient + remainder)(10, 3)
+        4
+
+    If a function returns an ``Iterable`` that it's not a tuple but unpacking in the next function is still needed,
+    built-in ``tuple`` can be inserted in between to achieve the desired effect:
+    ::
+
+        >>> from pypey import pipe
+        >>> pipe(range, tuple,  lambda _1, _2_, _3: sum([_1, _3]))(3)
+        2
+
+    Conversely, if a function returns a ``tuple`` but unpacking is not required in the next function, built-in ``list``
+    can be used to achieve the desired effect:
+    ::
+
+        >>> from pypey import pipe
+        >>> pipe(divmod, list, sum)(10, 3)
+        4
+
+    Note that ``list`` is the only exception to the rule that ``tuple`` returns will be unpacked.
+
+    :param functions: a variable number of functions
     :return: a combined function
     """
 
@@ -52,7 +75,7 @@ def require(cond: bool, message: str, exception: Type[Exception] = TypeError):
     """
     Guard clause, useful for implementing exception-raising checks concisely, especially useful in lambdas.
 
-    >>> from pypey import require
+    >>> from pypey import require, pype
     >>> pype([1,2,'3']).do(lambda n: require(isinstance(n, int), 'not an int'), now=True)
     Traceback (most recent call last):
        ...
@@ -72,7 +95,7 @@ def require_val(cond: bool, message: str):
     Throws ``ValueError`` exception if ``cond`` is ``False``, equivalent to :func:`require` with
     ``exception=ValueError``.
 
-    >>> from pypey import require_val
+    >>> from pypey import require_val, pype
     >>> pype([1,2,-3]).do(lambda n: require_val(n>0, 'not a positive number'), now=True)
     Traceback (most recent call last):
         ...
@@ -90,7 +113,7 @@ def throw(exception: Type[Exception], message: str):
     Throws given exception with given message, equivalent to built-in ``raise``. This function is useful for raising
     exceptions inside lambdas as ``raise`` is syntactically invalid in them.
 
-    >>> from pypey import throw
+    >>> from pypey import throw, pype
     >>> pype([1,2,3]).do(lambda n: throw(ValueError, 'test'), now=True)
     Traceback (most recent call last):
       ...
@@ -103,32 +126,11 @@ def throw(exception: Type[Exception], message: str):
     raise exception(message)
 
 
-def _pipe_functions(*arg: Any, functions: Tuple[Fn[..., Any], ...]) -> Any:
+def _pipe_functions(*arg: Any, functions: Tuple[Fn[..., Any], Any]) -> Any:
     # created as global function to avoid issues with multiprocessing
-    result = arg if len(arg) > 1 else arg[0]
+    result = arg
 
-    for fn in functions:
-        result = fn(*result) if _fast_guess_num_args(fn) > 1 and hasattr(result, '__iter__') else fn(result)
+    for idx, fn in enumerate(functions):
+        result = fn(*result) if idx == 0 or (idx > 0 and fn != list and isinstance(result, tuple)) else fn(result)
 
     return result
-
-
-def _fast_guess_num_args(fn: Fn[..., Any]) -> int:
-    num_args = 1
-
-    if hasattr(fn, '__code__'):
-        return fn.__code__.co_argcount - len(fn.__defaults__ or ()) + 2 * ('args' in fn.__code__.co_varnames)
-
-    return num_args
-
-
-def _accurate_guess_num_args(fn: Fn[..., Any]) -> int:
-    try:
-
-        spec = getfullargspec(fn)
-
-        return len([arg for arg in spec.args if arg != 'self']) - len(spec.defaults or []) + 2 * (spec.varargs != None)
-
-    except:
-
-        return 1

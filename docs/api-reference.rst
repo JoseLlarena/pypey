@@ -8,9 +8,10 @@ or immediate:
 |            | Deferred                         | Immediate                        |
 +============+==================================+==================================+
 | **Lazy**   | :func:`~pypey.Pype.accum`        | :func:`~pypey.Pype.do`           |
-|            | :func:`~pypey.Pype.cat`          | :func:`~pypey.Pype.map`          |
-|            | :func:`~pypey.Pype.chunk`        | :func:`~pypey.Pype.print`        |
-|            | :func:`~pypey.Pype.clone`        | :func:`~pypey.Pype.to_file`      |
+|            | :func:`~pypey.Pype.broadcast`    | :func:`~pypey.Pype.map`          |
+|            | :func:`~pypey.Pype.cat`          | :func:`~pypey.Pype.print`        |
+|            | :func:`~pypey.Pype.chunk`        | :func:`~pypey.Pype.to_file`      |
+|            | :func:`~pypey.Pype.clone`        |                                  |
 |            | :func:`~pypey.Pype.cycle`        |                                  |
 |            | :func:`~pypey.Pype.dist`         |                                  |
 |            | :func:`~pypey.Pype.do`           |                                  |
@@ -20,6 +21,7 @@ or immediate:
 |            | :func:`~pypey.Pype.flat`         |                                  |
 |            | :func:`~pypey.Pype.flatmap`      |                                  |
 |            | :func:`~pypey.Pype.it`           |                                  |
+|            | :func:`~pypey.Pype.interleave`   |                                  |
 |            | :func:`~pypey.Pype.map`          |                                  |
 |            | :func:`~pypey.Pype.partition`    |                                  |
 |            | :func:`~pypey.Pype.pick`         |                                  |
@@ -37,7 +39,8 @@ or immediate:
 |            | :func:`~pypey.Pype.zip`          |                                  |
 |            | :func:`~pypey.Pype.zip_with`     |                                  |
 +------------+----------------------------------+----------------------------------+
-| **Eager**  | :func:`~pypey.Pype.divide`       | :func:`~pypey.Pype.reduce`       |
+| **Eager**  | :func:`~pypey.Pype.divide`       | :func:`~pypey.Pype.eager`        |
+|            | :func:`~pypey.Pype.freqs`        | :func:`~pypey.Pype.reduce`       |
 |            | :func:`~pypey.Pype.group_by`     | :func:`~pypey.Pype.size`         |
 |            | :func:`~pypey.Pype.reverse`      |                                  |
 |            | :func:`~pypey.Pype.roundrobin`   |                                  |
@@ -45,6 +48,7 @@ or immediate:
 |            | :func:`~pypey.Pype.shuffle`      |                                  |
 |            | :func:`~pypey.Pype.sorted`       |                                  |
 |            | :func:`~pypey.Pype.take`         |                                  |
+|            | :func:`~pypey.Pype.to_json`      |                                  |
 |            | :func:`~pypey.Pype.top`          |                                  |
 |            | :func:`~pypey.Pype.unzip`        |                                  |
 +------------+----------------------------------+----------------------------------+
@@ -74,6 +78,12 @@ eager backing ``Iterable`` (``list``, ``tuple`` and so on). For instance if read
     >>> from pypey import pype
     >>> eager_pype = pype.file('text.txt').to(list, Pype)
 
+or more conveniently:
+
+.. code-block:: python
+
+    >>> from pypey import pype
+    >>> eager_pype = pype.file('text.txt').eager()
 
 :class:`~pypey.Pype`'s methods can also be categorised according to what kind of pipe they return: *mappings* return a pipe
 of the same size as the one they are applied to; *partitions* return divisions of the original pipe; and *selections*

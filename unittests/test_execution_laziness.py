@@ -39,20 +39,36 @@ def test_accumulation_with_initial_value_does_not_consume_whole_pipe():
     assert tuple(pipe) == _123
 
 
-def test_concatenation_does_not_consume_either_pipe():
+def test_broadcasting_does_not_consume_whole_pipe():
     pipe = _123_pype()
-    other_pipe = _654_pype()
 
-    next(iter(pipe.cat(other_pipe)))
+    next(iter(pipe.broadcast(range)))
 
     assert tuple(pipe) == _23
-    assert tuple(other_pipe) == _654
+
+
+def test_concatenation_does_not_consume_either_iterable():
+    pipe = _123_pype()
+    other = _654_pype()
+
+    next(iter(pipe.cat(other)))
+
+    assert tuple(pipe) == _23
+    assert tuple(other) == _654
 
 
 def test_chunking_does_not_consume_pipe():
     pipe = _123_pype()
 
     next(iter(pipe.chunk(2)))
+
+    assert tuple(pipe) == _23
+
+
+def test_chunking_with_multiple_sizes_does_not_consume_pipe():
+    pipe = _123_pype()
+
+    next(iter(pipe.chunk([1, 2])))
 
     assert tuple(pipe) == _23
 
@@ -151,6 +167,14 @@ def test_dropping_items_while_predicate_is_false_does_not_consume_pipe():
     assert tuple(pipe) == _23
 
 
+def test_eager_making_consumes_pipe():
+    pipe = _123_pype()
+
+    next(iter(pipe.eager()))
+
+    assert tuple(pipe) == ()
+
+
 def test_enumeration_does_not_consume_pipe():
     pipe = _123_pype()
 
@@ -183,12 +207,28 @@ def test_flatmapping_does_not_consume_pipe():
     assert tuple(pipe) == _fun_day
 
 
+def test_computing_item_frequencies_consumes_pipe():
+    pipe = _a_fun_day_pype()
+
+    next(iter(pipe.freqs()))
+
+    assert tuple(pipe) == ()
+
+
 def test_grouping_by_key_consumes_pipe():
     pipe = _a_fun_day_pype()
 
     next(iter(pipe.group_by(len)))
 
     assert tuple(pipe) == ()
+
+
+def test_interleaves_items_with_other_iterable_does_not_consume_pipe():
+    pipe = _123_pype()
+
+    next(iter(pipe.interleave(_a_fun_day_pype())))
+
+    assert tuple(pipe) == _23
 
 
 def test_concise_iteration_does_not_consume_pipe():
@@ -416,6 +456,14 @@ def test_lazy_writing_to_file_does_not_consume_pipe(tmpdir):
     assert tuple(pipe) == _23
 
 
+def test_writing_to_json_file_consumes_pipe(tmpdir):
+    target = join(tmpdir, 'object.json')
+    pipe = Pype((k, v) for k, v in [('a', 1), ('fun', 2), ('day', 3)])
+
+    with raises(StopIteration):
+        next(iter(pipe.to_json(target)))
+
+
 def test_asking_for_top_n_items_consumes_pipe():
     pipe = _123_pype()
 
@@ -450,12 +498,12 @@ def test_sliding_a_window_over_items_does_not_consume_pipe():
 
 def test_zipping_does_not_consume_pipe():
     pipe = _123_pype()
-    other_pipe = _123_pype()
+    other = _123_pype()
 
-    next(iter(pipe.zip(other_pipe)))
+    next(iter(pipe.zip(other)))
 
     assert tuple(pipe) == _23
-    assert tuple(other_pipe) == _23
+    assert tuple(other) == _23
 
 
 def test_self_zipping_consumes_pipe():
