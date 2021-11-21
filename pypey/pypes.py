@@ -1,10 +1,10 @@
 """
-Contains factory for creating pype from different sources.
+Factory for creating pype from different sources.
 """
+import json as built_in_json
 from collections import abc
 from os import PathLike
-from pathlib import Path
-from typing import Iterable, Tuple, Union, Mapping, Iterator, AnyStr, Optional
+from typing import Iterable, Tuple, Union, Mapping, Iterator, AnyStr, Optional, List, Dict, Type, Any
 
 from pypey import require
 from pypey.func import Fn, K, V, T, require_val
@@ -28,7 +28,7 @@ class Pyper:
 
         :param iterable: backing ``Iterable`` for this `Pype``
         :return: a new `Pype`` backed by the given ``Iterable``
-        :raise ``TypeError`` if ``iterable`` is not an ``Iterable``
+        :raises ``TypeError`` if ``iterable`` is not an ``Iterable``
         """
 
         try:
@@ -103,8 +103,57 @@ class Pyper:
 
         return Pype(dictionary.items())
 
+    @staticmethod
+    def json(src: Union[AnyStr, PathLike, int],
+             *,
+             mode: str = 'r',
+             cls: Optional[Type] = None,
+             object_hook: Optional[Fn] = None,
+             parse_float: Optional[Fn] = None,
+             parse_int: Optional[Fn] = None,
+             parse_constant: Optional[Fn] = None,
+             object_pairs_hook: Optional[Fn] = None) -> Pype[Union[Tuple[str, Any], None, bool, float, int, str]]:
+        """
+        Reads content in given json into a pipe.
 
-def _lines_from(src: Union[AnyStr, Path, int],
+        >>> from pypey import pype
+        >>> from os.path import join, dirname
+        >>> dict(pype.json(join(dirname(__file__), 'unittests', 'object.json')))
+        {'a': 1.0, 'fun': 2.0, 'day': 3.0}
+
+        :param src: path to the file or file descriptor, as per built-in ``open``  ``file`` argument
+        :param mode: mode as per built-in ``open``, except no write modes are allowed
+        :param cls: custom JSONDecoder class, as per ``json.load``
+        :param object_hook: object_hook ``Callable``, as per ``json.load``
+        :param parse_float: parse_float ``Callable``, as per ``json.load``
+        :param parse_int: parse_int ``Callable``, as per ``json.load``
+        :param parse_constant: parse_constance ``Callable``, as per ``json.load``
+        :param object_pairs_hook: object_pairs_hook ``Callable``, as per ``json.load``
+        :return: pype with single item if json contains a single value, several items if json contains a list and
+            pairs of items if json contains object
+        """
+        require_val('w' not in mode and '+' not in mode and 'a' not in mode,
+                    f'mode cannot be write or append but was [{mode}]')
+
+        with open(src, mode=mode) as json_file:
+            value = built_in_json.load(json_file,
+                                       cls=cls,
+                                       object_hook=object_hook,
+                                       parse_float=parse_float,
+                                       parse_int=parse_int,
+                                       parse_constant=parse_constant,
+                                       object_pairs_hook=object_pairs_hook)
+
+            if isinstance(value, List):
+                return Pype(value)
+
+            if isinstance(value, Dict):
+                return Pype(value.items())
+
+            return Pype((value,))
+
+
+def _lines_from(src: Union[AnyStr, PathLike, int],
                 strip: bool,
                 mode: str,
                 buffering: int,
@@ -112,7 +161,7 @@ def _lines_from(src: Union[AnyStr, Path, int],
                 errors: Optional[str],
                 newline: Optional[str],
                 closefd: bool,
-                opener: Optional[Fn[..., int]] = None) -> Iterator[str]:
+                opener: Optional[Fn[[str, int], int]] = None) -> Iterator[str]:
     with open(src,
               mode=mode,
               buffering=buffering,

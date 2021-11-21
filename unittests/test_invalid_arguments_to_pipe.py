@@ -10,8 +10,9 @@ from unittests import _123_pype, _123, _a_fun_day_pype
 
 NON_INTS = 'a', 4.2, lambda n: n, _123, None
 NON_PYPES = NON_INTS
+NON_ITERABLES = 4.2, lambda n: n, None, True
 NON_BINARY_FUNCTIONS = NON_INTS
-NON_CALLABLES = ['a', 4.2, _123, None]
+NON_CALLABLES = 'a', 4.2, _123, None
 
 
 @mark.parametrize('fn', NON_BINARY_FUNCTIONS)
@@ -21,22 +22,29 @@ def test_accumulation_fails_with_non_binary_functions(fn):
         tuple(_123().accum(fn))
 
 
-@mark.parametrize('pipe', NON_PYPES)
-def test_concatenation_fails_with_non_pypes(pipe):
+@mark.parametrize('fn', NON_CALLABLES)
+def test_broadcasting_fails_with_non_callables(fn):
     """"""
     with raises(TypeError):
-        tuple(_123_pype().cat(pipe))
+        tuple(_123_pype().broadcast(fn))
 
 
-@mark.parametrize('n', NON_INTS)
-def test_chunking_fails_with_non_int_size(n):
+@mark.parametrize('other', NON_ITERABLES)
+def test_concatenation_fails_with_non_pypes(other):
+    """"""
+    with raises(TypeError):
+        tuple(_123_pype().cat(other))
+
+
+@mark.parametrize('n', ['a', 4.2, lambda n: n, None, ('1', '2')])
+def test_chunking_fails_with_non_int_and_no_iterable_of_ints_size(n):
     """"""
     with raises(TypeError):
         tuple(_123_pype().chunk(n))
 
 
-@mark.parametrize('n', [0, -1])
-def test_chunking_fails_with_non_positive_size(n):
+@mark.parametrize('n', [0, -1, (0, -1)])
+def test_chunking_fails_with_non_positive_sizes(n):
     """"""
     with raises(ValueError):
         tuple(_123_pype().chunk(n))
@@ -161,6 +169,27 @@ def test_grouping_fails_with_non_callable_keys(fn):
     """"""
     with raises(TypeError):
         tuple(_123_pype().group_by(fn))
+
+
+@mark.parametrize('it', NON_ITERABLES)
+def test_interleaving_fails_with_non_iterables(it):
+    """"""
+    with raises(TypeError):
+        tuple(_123_pype().interleave(it))
+
+
+@mark.parametrize('n', [-1, 0])
+def test_interleaving_fails_with_non_positive_int(n):
+    """"""
+    with raises(ValueError):
+        tuple(_123_pype().interleave(_a_fun_day_pype(), n=n))
+
+
+@mark.parametrize('n', NON_INTS)
+def test_interleaving_fails_with_non_int_n(n):
+    """"""
+    with raises(TypeError):
+        tuple(_123_pype().interleave(_a_fun_day_pype(), n=n))
 
 
 @mark.parametrize('fn', NON_CALLABLES)
@@ -363,6 +392,19 @@ def test_writing_to_file_fails_with_invalid_paths(path):
         _123_pype().to_file(path, now=True)
 
 
+@mark.parametrize('path', [4.2, None, abs])
+def test_writing_to_json_fails_with_invalid_paths(path):
+    """"""
+    with raises(TypeError):
+        _123_pype().to_json(path)
+
+
+def test_writing_pype_with_singletons_to_json_fails():
+    """"""
+    with raises(TypeError):
+        _123_pype().to_json('anypath')
+
+
 @mark.parametrize('mode', ['r', 'rt', 'rb', 'r+', 'r+b'])
 def test_writing_to_file_fails_with_invalid_open_modes(mode, tmpdir):
     """"""
@@ -409,11 +451,11 @@ def test_sliding_window_over_items_fails_with_negative_sizes():
         tuple(_123_pype().window(-1))
 
 
-@mark.parametrize('pipe', NON_PYPES)
-def test_zipping_fails_with_non_pipes(pipe):
+@mark.parametrize('other', NON_ITERABLES)
+def test_zipping_fails_with_non_iterable(other):
     """"""
     with raises(TypeError):
-        tuple(_123_pype().zip(pipe))
+        tuple(_123_pype().zip(other))
 
 
 @mark.parametrize('fn', NON_CALLABLES)

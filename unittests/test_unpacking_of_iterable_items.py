@@ -10,6 +10,11 @@ import sys
 from unittests import _112233_pype, _112233, _aAfunFUNdayDAY_pype
 
 
+def test_broadcasts_unpacked_items():
+    assert list(_112233_pype().broadcast(lambda left, right: [left + 1, right + 2])) == \
+           [((1, 1), 2), ((1, 1), 3), ((2, 2), 3), ((2, 2), 4), ((3, 3), 4), ((3, 3), 5)]
+
+
 def test_produces_a_side_effect_per_unpacked_item():
     side_effect = create_autospec(lambda left, right: None)
 

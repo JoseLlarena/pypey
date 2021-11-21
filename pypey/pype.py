@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from collections import defaultdict, deque
+from inspect import signature, Parameter
 from logging import getLogger
 from multiprocessing import Pool
 from operator import eq
@@ -17,26 +19,37 @@ try:  # _tuplegetter is only available from 3.8
 except ImportError:
     _tuplegetter = property
 
-from pathos.multiprocessing import ProcessPool
+from pathos.multiprocessing import ProcessPool  # type: ignore
 from collections.abc import Sized
 from functools import reduce
 from heapq import nlargest
-from itertools import chain, tee, accumulate, filterfalse, islice, dropwhile, takewhile, cycle, zip_longest
-from more_itertools import tail, random_permutation, ichunked, unique_everseen, side_effect, partition, unzip, \
-    always_reversible
-from pathlib import Path
+from itertools import chain, tee, accumulate, filterfalse, islice, dropwhile, takewhile, cycle, zip_longest, product
+from more_itertools import tail, random_permutation, ichunked, unique_everseen, partition, unzip, \
+    always_reversible, interleave, interleave_longest, collapse, split_into
 from sys import stdout
-from typing import Iterator, Iterable, Tuple, Generic, Union, Any, Optional, List, AnyStr, IO, Sequence, NamedTuple
+from typing import Iterator, Iterable, Tuple, Generic, Union, Any, Optional, List, AnyStr, IO, Sequence, NamedTuple, \
+    Deque, Dict
 
-from pypey.func import Fn, ident, H, I, T, X, Z, require, require_val, pipe, _accurate_guess_num_args
+from pypey.func import Fn, ident, H, I, T, X, Y, require, require_val
 
-__all__ = ['Pype', 'SPLIT_MODES']
+__all__ = ['Pype', 'SPLIT_MODES', 'Total', 'TOTAL']
 
 logger = getLogger(__name__)
 
 flatten = chain.from_iterable
 
 SPLIT_MODES = frozenset({'at', 'after', 'before'})
+
+
+class Total(str):
+    def __str__(self):
+        return '_TOTAL_'
+
+    def __repr__(self):
+        return str(self)
+
+
+TOTAL = Total()
 
 UNARY_WITHOUT_SIGNATURE = {__import__,
                            bool, bytearray, bytes,
@@ -51,7 +64,8 @@ UNARY_WITHOUT_SIGNATURE = {__import__,
                            set, staticmethod, str, super,
                            type,
                            vars}
-N_ARY_WITHOUT_SIGNATURE = {breakpoint, filter, slice, range, zip}
+
+N_ARY_WITHOUT_SIGNATURE = {filter, slice, range, zip, breakpoint}
 
 _sent = object()
 
@@ -74,11 +88,11 @@ class Pype(Generic[T]):
 
         :param it: an ``Iterable``
         """
-        self._it: Iterable[T] = it
+        self._it = it
 
     def __iter__(self: Pype[T]) -> Iterator[T]:
         """
-        Returns iterator either by a call on this pipe or by calling ``iter`` on it.
+        Returns iterator either by a call on this pipe or by calling built-in ``iter`` on it.
 
         :return: an ``Iterator`` for this pipe's data
         """
@@ -86,25 +100,27 @@ class Pype(Generic[T]):
 
     def __setstate__(self: Pype[T], state: Iterable[T]):
         """
-        Set this Pype's state to be the given iterable. This method is a counterpart of ``Pype.__get_state__``.
+        Set this Pype's state to be the given iterable. This method is a counterpart :func:`Pype.__get_state__`.
 
         :param state: an iterable to be the state of this Pype
         :return: nothing
         """
         self._it = state
 
-    def accum(self: Pype[T], fn: Fn[[Z, T], Z], init: Optional[Z] = None) -> Pype[Z]:
+    def accum(self: Pype[T], fn: Fn[[X, T], X], init: Optional[X] = None) -> Pype[X]:
         """
         Returns a pipe where each item is the result of combining a running total with the corresponding item in the
         original pipe:
         ::
 
+            >>> from pypey import pype
             >>> list(pype([1, 2, 3]).accum(lambda total, n: total+n))
             [1, 3, 6]
 
         When an initial value is given, the resulting pipe will have one more item than the original one:
         ::
 
+            >>> from pypey import pype
             >>> list(pype([1, 2, 3]).accum(lambda total, n: total+n, init=0))
             [0, 1, 3, 6]
 
@@ -120,65 +136,112 @@ class Pype(Generic[T]):
         # Try block necessary to support <3.8 as init argument has not been implemented in those versions
         try:
 
-            return Pype(accumulate(self._data(), fn, init))
+            return Pype(accumulate(self._data(), fn, initial=init))
 
         except TypeError:
 
             return Pype(_accumulate(self._data(), fn, init))
 
-    def cat(self: Pype[T], other: Pype[Z]) -> Pype[Union[T, Z]]:
+    def broadcast(self: Pype[T], fn: Fn[[T], Iterable[X]]) -> Pype[Tuple[T, X]]:
         """
-        Concatenates this pipe with the given one.
+        Returns the flattened Cartesian product of this pipe's items and the items returned by ``fn``.
+        Conceptually similar to ``numpy``-'s broadcasting.
+        ::
 
-        >>> list(pype([1, 2, 3]).cat(pype([4, 5, 6])))
+            >>> from pypey import pype
+            >>> list(pype(['a', 'fun', 'day']).broadcast(tuple).map(lambda word, char: f'{word} -> {char}'))
+            ['a -> a', 'fun -> f', 'fun -> u', 'fun -> n', 'day -> d', 'day -> a', 'day -> y']
+
+        :param fn: function to create ``Iterable`` from each of this pipe's items
+        :return: a pipe where each item is a pair with the first element being the nth instance of this pipe's items
+            and the second an element of ``fn``-s returned ``Iterable``
+        :raises: ``TypeError`` if ``fn`` is not a ``Callable``
+        """
+        ufn, data = self._ufn(fn), self._data()
+
+        return Pype(flatten(product([item], ufn(item)) for item in data))
+
+    def cat(self: Pype[T], other: Iterable[X]) -> Pype[Union[T, X]]:
+        """
+        Concatenates this pipe with the given ``Iterable``.
+
+        >>> list(pype([1, 2, 3]).cat([4, 5, 6]))
         [1, 2, 3, 4, 5, 6]
 
-        :param other: pipe to append to this one
+        :param other: ``Iterable`` to append to this one
         :return: a concatenated pipe
-        :raises: ``TypeError`` if ``other`` is not a ``Pype``
+        :raises: ``TypeError`` if ``other`` is not an ``Iterable``
         """
-        require(isinstance(other, Pype), 'fn other needs to be a Pype')
+        require(isinstance(other, Iterable), 'other needs to be an Iterable')
 
         return Pype(chain(self._data(), other))
 
-    def chunk(self: Pype[T], size: int) -> Pype[Pype[T]]:
+    def chunk(self: Pype[T], size: Union[int, Iterable[int]]) -> Pype[Pype[T]]:
         """
         Breaks pipe into sub-pipes with up to ``size`` items each:
         ::
 
+            >>> from pypey import pype
             >>> [list(chunk) for chunk in pype([1, 2, 3, 4]).chunk(2)]
             [[1, 2], [3, 4]]
 
         If this pipe's size is not a multiple of ``size``, the last chunk will have fewer items than ``size``:
         ::
 
+            >>> from pypey import pype
             >>> [list(chunk) for chunk in pype([1, 2, 3]).chunk(2)]
             [[1, 2], [3]]
 
         If ``size`` is larger than this pipe's size, only one chunk will be returned:
         ::
 
+            >>> from pypey import pype
             >>> [list(chunk) for chunk in pype([1, 2, 3, 4]).chunk(5)]
             [[1, 2, 3, 4]]
 
+        If ``size`` is an iterable of ints, chunks will have corresponding sizes:
+        ::
+
+            >>> [list(chunk) for chunk in pype([1, 2, 3, 4]).chunk([1, 3])]
+            [[1], [2, 3, 4]]
+
+        If the sum of sizes is smaller than this pipe's length, the remaining items will not be returned:
+        ::
+
+            >>> from pypey import pype
+            >>> list(chunk) for chunk in pype([1, 2, 3, 4]).chunk([1, 2])]
+            [[1], [2, 3]]
+
+        If the sum of sizes is larger than this pipe's length, fewer items will be returned in the chunk that overruns
+        the pipe and further chunks will be empty:
+        ::
+
+            >>> from pypey import pype
+            >>> [list(chunk) for chunk in pype([1, 2, 3, 4]).chunk([1, 2, 3, 4])]
+            [[1], [2, 3], [4], []]
+
         This method tees the backing ``Iterable``.
 
-        Similar to ``more_itertools.ichunked``.
+        Similar to ``more_itertools.ichunked`` and ``more_itertools.split_into``.
 
-        :param size: chunk size
-        :return: a pipe of pipes with up to size items each
-        :raises: ``TypeError`` if ``size`` is not an ``int``
-        :raises: ``ValueError`` if ``size`` is not positive
+        :param size: chunk size or sizes
+        :return: a pipe of pipes with up to `size` items each or with sizes specified by iterable of sizes
+        :raises: ``TypeError`` if ``size`` is not an ``int`` or an ``Iterable`` of ``int``-s
+        :raises: ``ValueError`` if ``size`` is not positive or if any of the iterable of sizes is not positive
         """
-        require(isinstance(size, int), f'n needs to be an int but was [{type(size)}]')
-        require_val(size > 0, f'n needs to be greater than 0 but was [{size}]')
+        sizes = [s for s in size if isinstance(s, int)] if isinstance(size, Iterable) else []
+        require(isinstance(size, int) or bool(sizes), f'n must be an int or an iterable of ints but was [{type(size)}]')
+        require_val(size > 0 if isinstance(size, int) else all(s > 0 for s in sizes), f'n must be > 0 but was [{size}]')
 
-        return Pype(map(Pype, ichunked(self._data(), size)))
+        fn = ichunked if isinstance(size, int) else split_into
+
+        return Pype(map(Pype, fn(self._data(), size)))
 
     def clone(self: Pype[T]) -> Pype[T]:
         """
         Lazily clones this pipe. This method tees the backing ``Iterable`` and replaces it with a new copy.
 
+        >>> from pypey import pype
         >>> list(pype([1, 2, 3]).clone())
         [1, 2, 3]
 
@@ -194,13 +257,15 @@ class Pype(Generic[T]):
         Returns items in pipe ``n`` times if ``n`` is not ``None``:
         ::
 
+            >>> from pypey import pype
             >>> list(pype([1, 2, 3]).cycle(2))
             [1, 2, 3, 1, 2, 3]
 
         else it returns infinite copies:
         ::
 
-            >>> list(pype([1, 2, 3]).cycle().head(6))
+            >>> from pypey import pype
+            >>> list(pype([1, 2, 3]).cycle().take(6))
             [1, 2, 3, 1, 2, 3]
 
         Similar to ``itertools.cycle`` with ``n`` = ``None`` and to ``more_itertools.ncycles`` with integer ``n``.
@@ -227,6 +292,7 @@ class Pype(Generic[T]):
         amongst them:
         ::
 
+            >>> from pypey import pype
             >>> [list(segment) for segment in pype([1, 2, 3, 4, 5, 6]).dist(2)]
             [[1, 3, 5], [2, 4, 6]]
 
@@ -234,12 +300,14 @@ class Pype(Generic[T]):
         items will not be identical:
         ::
 
+            >>> from pypey import pype
             >>> [list(segment) for segment in pype([1, 2, 3, 4, 5]).dist(2)]
             [[1, 3, 5], [2, 4]]
 
         If this pipe's size is smaller than ``n``, the last pipes in the returned pipe will be empty:
         ::
 
+            >>> from pypey import pype
            >>> [list(segment) for segment in pype([1, 2, 3, 4, 5]).dist(7)]
             [[1], [2], [3], [4], [5], [], []]
 
@@ -264,6 +332,7 @@ class Pype(Generic[T]):
         Breaks pipe into ``n`` sub-pipes:
         ::
 
+            >>> from pypey import pype
             >>> [list(div) for div in pype([1, 2, 3, 4, 5, 6]).divide(2)]
             [[1, 2, 3], [4, 5, 6]]
 
@@ -271,6 +340,7 @@ class Pype(Generic[T]):
         will contain all excess items:
         ::
 
+            >>> from pypey import pype
             >>> [list(div) for div in pype([1, 2, 3, 4, 5, 6, 7]).divide(3)]
             [[1, 2], [3, 4], [5, 6, 7]]
 
@@ -278,6 +348,7 @@ class Pype(Generic[T]):
         are in it, followed by ``n`` minus this pipe's size empty pipes.
         ::
 
+            >>> from pypey import pype
             >>> [list(div) for div in pype([1, 2, 3]).divide(4)]
             [[1], [2], [3], []]
 
@@ -296,7 +367,7 @@ class Pype(Generic[T]):
 
         return Pype(map(Pype, _deferred_divide(self._data(), n)))
 
-    def do(self: Pype[T], fn: Fn[..., Any], *, now: bool = False, workers: int = 0, chunk_size: int = 100) -> Pype[T]:
+    def do(self: Pype[T], fn: Fn[[T], Any], *, now: bool = False, workers: int = 0, chunk_size: int = 100) -> Pype[T]:
         """
         Produces a side effect for each item, with the given function's return value ignored. It is typically used to
         execute an operation that is not functionally pure such as printing to console, updating a GUI, writing to disk
@@ -304,6 +375,7 @@ class Pype(Generic[T]):
 
         ::
 
+            >>> from pypey import pype
             >>> p = pype(iter([1, 2, 3])).do(lambda n: print(f'{n}'))
             >>> list(p)
             1
@@ -315,6 +387,7 @@ class Pype(Generic[T]):
         consumed if lazy.
         ::
 
+            >>> from pypey import pype
             >>> p = pype(iter([1, 2, 3])).do(lambda n: print(f'{n}'), now=True)
             1
             2
@@ -328,7 +401,7 @@ class Pype(Generic[T]):
         ``Iterable`` is teed to avoid consumption. Using a large ``chunk_size`` can greately speed up parallelisation;
         it is ignored if ``workers`` is ``0``.
 
-        Also known as ``for_each`` ``tap``, and ``sink``.
+        Also known as ``for_each``, ``tap`` and ``sink``.
 
         Similar to ``more_itertools.side_effect``.
 
@@ -344,7 +417,7 @@ class Pype(Generic[T]):
         require(isinstance(chunk_size, int), f'chunk size should be a positive int but was [{chunk_size}]')
         require_val(chunk_size > 0, f'chunk size should be a positive int but was [{chunk_size}]')
 
-        ufn = _unpack_fn(fn)
+        ufn = self._ufn(fn)
 
         if workers:
 
@@ -356,27 +429,27 @@ class Pype(Generic[T]):
 
                 return self
 
-            return Pype(side_effect(ident, mapping))
-
-        data = self._data()
+            return Pype(_side_effect(ident, mapping))
 
         if now:
 
-            for item in data:
+            for item in self._data():
                 ufn(item)
 
             return self
 
-        return Pype(side_effect(ufn, data))
+        return Pype(_side_effect(ufn, self._data()))
 
     def drop(self: Pype[T], n: int) -> Pype[T]:
         """
         Returns this pipe but with the first or last ``n`` items missing:
         ::
 
+            >>> from pypey import pype
             >>> list(pype([1, 2, 3, 4]).drop(2))
             [3, 4]
 
+            >>> from pypey import pype
             >>> list(pype([1, 2, 3, 4]).drop(-2))
             [1, 2]
 
@@ -385,7 +458,7 @@ class Pype(Generic[T]):
         :raises: ``TypeError`` if ``n`` is not an ``int``
 
         """
-        require(isinstance(n, int), f'start needs to be an int but was [{type(n)}]')
+        require(isinstance(n, int), f'n needs to be an int but was [{type(n)}]')
 
         if n == 0:
             return self
@@ -396,6 +469,7 @@ class Pype(Generic[T]):
         """
         Drops items as long as the given predicate is ``True``; afterwards, it returns every item:
 
+        >>> from pypey import pype
         >>> list(pype([1, 2, 3, 4]).drop_while(lambda n: n < 3))
         [3, 4]
 
@@ -406,19 +480,45 @@ class Pype(Generic[T]):
         :raises: ``TypeError`` if ``pred`` is not a ``Callable``
         """
 
-        return Pype(dropwhile(_unpack_fn(pred), self._data()))
+        return Pype(dropwhile(self._ufn(pred), self._data()))
+
+    def eager(self: Pype[T]) -> Pype[T]:
+        """
+        Returns a pype with the same contents as this one but with an eager backing collection. This will trigger
+        reading the whole backing ``Iterable`` into memory.
+
+        >>> from pypey import pype
+        >>> p = pype(range(-5, 5)).map(abs)
+        >>> p.size()
+        10
+        >>> p.size()
+        0
+        >>> p = pype(range(-5, 5)).map(abs).eager()
+        >>> p.size()
+        10
+        >>> p.size()
+        10
+
+        :return: this pipe, but eager
+        """
+        if isinstance(self._data(), Sequence) and not isinstance(self._data(), range):
+            return self
+
+        return Pype(tuple(self._data()))
 
     def enum(self: Pype[T], start: int = 0, *, swap: bool = False) -> Pype[Union[Tuple[int, T], Tuple[T, int]]]:
         """
         Pairs each item with an increasing integer index:
         ::
 
+            >>> from pypey import pype
             >>> list(pype(['a', 'fun', 'day']).enum())
             [(0, 'a'), (1, 'fun'), (2, 'day')]
 
         ``swap`` = ``True`` will swap the index and item around:
         ::
 
+            >>> from pypey import pype
             >>> list(pype(['a', 'fun', 'day']).enum(swap=True))
             [('a', 0), ('fun', 1), ('day', 2)]
 
@@ -438,6 +538,7 @@ class Pype(Generic[T]):
         Flattens iterable items into a collection of their elements:
         ::
 
+            >>> from pypey import pype
             >>> list(pype(['a', 'fun', 'day']).flat())
             ['a', 'f', 'u', 'n', 'd', 'a', 'y']
 
@@ -449,7 +550,7 @@ class Pype(Generic[T]):
 
         return Pype(flatten(self._data()))
 
-    def flatmap(self: Pype[I], fn: Fn[..., I]) -> Pype[Z]:
+    def flatmap(self: Pype[I], fn: Fn[..., I]) -> Pype[X]:
         """
         Maps ``Iterable`` items and then flattens the result into their elements.
 
@@ -460,12 +561,35 @@ class Pype(Generic[T]):
         :raises: ``TypeError`` if items are not ``Iterable`` or ``fn`` is not a ``Callable``
         """
 
-        return Pype(flatten(map(_unpack_fn(fn), self._data())))
+        return Pype(flatten(map(self._ufn(fn), self._data())))
 
-    def group_by(self: Pype[T], key: Fn[..., Z]) -> Pype[Tuple[Z, List[T]]]:
+    def freqs(self: Pype[T], total: bool = True) -> Pype[Tuple[Union[T, object], int, float]]:
+        """
+        Computes this pipe's items' absolute and relative frequencies and optionally the total:
+        ::
+
+            >>> from pypey import pype
+            >>> tuple(pype('AAB').freqs())
+            (('A', 2, 0.6666666666666666), ('B', 1, 0.3333333333333333), (_TOTAL_, 3, 1.0))
+
+        If `total` is `False`, the total is left out:
+        ::
+
+            >>> from pypey import pype
+            >>> tuple(pype('AAB').freqs(total=False))
+            (('A', 2, 0.6666666666666666), ('B', 1, 0.3333333333333333))
+
+        :return: a pype containing tuples with this pipe's uniques items, plus the total as the ``pype.TOTAL`` item,
+            with their absolute and relative frequencies
+        """
+
+        return Pype(_deferred_freqs(self._data(), total))
+
+    def group_by(self: Pype[T], key: Fn[..., Y]) -> Pype[Tuple[Y, List[T]]]:
         """
         Groups items according to the key returned by the ``key`` function:
 
+        >>> from pypey import pype
         >>> list(pype(['a', 'fun', 'day']).group_by(len))
         [(1, ['a']), (3, ['fun', 'day'])]
 
@@ -473,18 +597,67 @@ class Pype(Generic[T]):
 
         Similar to ``itertools.groupby`` except elements don't need to be sorted
 
-        :param key:  function taking a possibly unpacked item and returning a grouping key
+        :param key: function taking a possibly unpacked item and returning a grouping key
         :return: a pipe made up of pairs of keys and lists of items
         :raises: ``TypeError`` if ``fn`` is not a ``Callable``
         """
+        ufn, data = self._ufn(key), self._data()
 
-        return Pype(_deferred_group_by(self._data(), _unpack_fn(key)))
+        return Pype(_deferred_group_by(data, ufn))
+
+    def interleave(self: Pype[T], other: Iterable[X], n: int = 1, trunc: bool = True) -> Pype[Union[T, X, Any]]:
+        """
+        Returns a pipe where items in this pipe are interleaved with items in the given ``Iterable``, in order.
+        If either this pipe or the other ``Iterable`` are exhausted the interleaving stops:
+        ::
+
+            >>> from pypey import pype
+            >>> list(pype(['a', 'fun', 'fun', 'day']).interleave([1, 2, 3]))
+            ['a', 1, 'fun', 2, 'fun', 3]
+
+        Setting ``trunc`` to ``True`` will keep adding the left over items in the ``Iterable`` that hasn't been
+        exhausted after the other one is:
+        ::
+
+            >>> from pypey import pype
+            >>> list(pype(['a', 'fun', 'fun', 'day']).interleave([1, 2, 3], trunc=False))
+            ['a', 1, 'fun', 2, 'fun', 3, 'day']
+
+        The number of items in this pipe's to leave between the items in the ``Iterable`` can be varied:
+        ::
+
+            >>> from pypey import pype
+            >>> list(pype(['a', 'fun', 'fun', 'day']).interleave([1, 2, 3], n=2))
+            ['a', 'fun', 1, 'fun', 'day', 2]
+
+        This operation is lazy.
+
+        A cross between ``more_itertools.interleave_longest``, ``more_itertools.interleave`` and
+        ``more_itertools.intersperse``.
+
+        :param other: the ``Iterable`` whose items will be interleaved with this pipe's
+        :param n: the number of this pipe's items to leave between each of the ``Iterable``-'s ones
+        :param trunc: ``True`` if the unexhausted ``Iterable`` should be truncated once the other one is
+        :return: A pipe with this pipe's elements and the given ``Iterable``-'s in order
+        :raises: ``TypeError`` if ``other`` is not an ``Iterable`` or ``n` is not an ``int``
+        :raises: ``ValueError`` if ``n`` is less than one
+        """
+        require(isinstance(n, int), f'n needs to be a positive integer but was [{n}]')
+        require_val(n >= 1, f'n needs to be an int but was [{type(n)}]')
+
+        this_data = self._data() if n == 1 else ichunked(self._data(), n)
+
+        if trunc:
+            return Pype(collapse(interleave(this_data, other), levels=1))
+
+        return Pype(collapse(interleave_longest(this_data, other), levels=1))
 
     def it(self: Pype[T]) -> Iterator[T]:
         """
         Returns an ``Iterator`` for this pipe's items. It's a more concise version of, and functionally identical
         to, :func:`Pype.__iter__`
 
+        >>> from pypey import pype
         >>> list(iter(pype([1, 2, 3]))) == list(pype([1, 2, 3]).it())
         True
 
@@ -492,19 +665,21 @@ class Pype(Generic[T]):
         """
         return iter(self)
 
-    def map(self: Pype[T], fn: Fn[..., Z], *other_fns: Fn[..., X], workers: int = 0, chunk_size: int = 100) \
-            -> Pype[Union[X, Z]]:
+    def map(self: Pype[T], fn: Fn[..., Y], *other_fns: Fn[..., X], workers: int = 0, chunk_size: int = 100) \
+            -> Pype[Union[X, Y]]:
         """
         Transforms this pipe's items according to the given function(s):
         ::
 
             >>> from math import sqrt
+            >>> from pypey import pype
             >>> list(pype([1, 2, 3]).map(sqrt))
             [1.0, 1.4142135623730951, 1.7320508075688772]
 
         If more than one function is provided, they will be chained into a single one before being applied to each item:
         ::
 
+            >>> from pypey import pype
             >>> list(pype(['a', 'fun', 'day']).map(str.upper, reversed, list))
             [['A'], ['N', 'U', 'F'], ['Y', 'A', 'D']]
 
@@ -530,7 +705,7 @@ class Pype(Generic[T]):
         require(isinstance(chunk_size, int), f'chunk size should be a positive int but was [{chunk_size}]')
         require_val(chunk_size > 0, f'chunk size should be a positive int but was [{chunk_size}]')
 
-        combo_fn = pipe(*map(_unpack_fn, (fn,) + other_fns))
+        combo_fn = self._ufn(fn) if not other_fns else px(_pipe, functions=[self._ufn(fn) for fn in (fn,) + other_fns])
 
         if workers:
             return Pype(_parallel_map(self._data(), combo_fn, workers, chunk_size))
@@ -542,17 +717,19 @@ class Pype(Generic[T]):
         Splits this pipe's items into two pipes, according to whether the given
         predicate returns ``True`` or ``False``:
 
+        >>> from pypey import pype
         >>> [list(p) for p in pype([1, 2, 3, 4]).partition(lambda n: n%2)]
         [[2, 4], [1, 3]]
 
         This method tees the backing ``Iterable``.
 
         :param pred: A function taking a possibly unpacked item and returning a boolean
-        :return: a 2-``tuple`` with the first item being a pipe with items for which ``pred`` is ``False`` and the second a
-            pipe with items for which it is ``True``
+        :return: a 2-``tuple`` with the first item being a pipe with items for which ``pred`` is ``False`` and the
+            second a pipe with items for which it is ``True``
         :raises: ``TypeError`` if ``pred`` is not a ``Callable``
         """
-        falses, trues = partition(_unpack_fn(pred), self._data())
+
+        falses, trues = partition(self._ufn(pred), self._data())
 
         return Pype(falses), Pype(trues)
 
@@ -561,6 +738,7 @@ class Pype(Generic[T]):
         Maps each item to the given ``key``. Allowed keys are any supported by ``object.__item__`` :
         ::
 
+            >>> from pypey import pype
             >>> list(pype(['a', 'fun', 'day']).pick(0))
             ['a', 'f', 'd']
 
@@ -568,11 +746,12 @@ class Pype(Generic[T]):
         ::
 
             >>> from collections import namedtuple
+            >>> from pypey import pype
             >>> Person = namedtuple('Person', ['age'])
             >>> list(pype([Person(42), Person(24)]).pick(Person.age))
             [42, 24]
 
-        Similar to :func:`Pype.map(lambda item: item.key)` and :func:`Pype.map(lambda item: item[key])`.
+        Equivalent to :func:`Pype.map(lambda item: item.key)` and :func:`Pype.map(lambda item: item[key])`.
 
         :param key: key to pick from each item
         :return: a pipe where each item in this pipe has been replaced with the given key
@@ -590,9 +769,10 @@ class Pype(Generic[T]):
               flush: bool = False,
               now: bool = True) -> Pype[T]:
         """
-        Prints string returned by given function using ``print``:
+        Prints string returned by given function using built-in ``print``:
         ::
 
+            >>> from pypey import pype
             >>> p = pype(iter([1, 2, 3])).print()
             >>> list(p)
             1
@@ -603,6 +783,7 @@ class Pype(Generic[T]):
         If ``now`` is set to ``True``, the printing  takes place immediately and the backing ``Iterable`` is consumed:
         ::
 
+            >>> from pypey import pype
             >>> p = pype(iter([1, 2, 3])).print(now=True)
             1
             2
@@ -622,24 +803,25 @@ class Pype(Generic[T]):
         :raises: ``TypeError`` if ``fn`` is not a ``Callable``
         """
 
-        ufn = fn if fn == str else _unpack_fn(fn)
+        ufn, data = (fn if fn == str else self._ufn(fn), self._data())
 
         if now:
 
-            for item in self._data():
+            for item in data:
                 print(ufn(item), sep=sep, end=end, file=file, flush=flush)
 
             return self
 
         return self.do(px(_print_fn, ufn=ufn, sep=sep, end=end, file=file, flush=flush))
 
-    def reduce(self: Pype[T], fn: Fn[[H, T], H], init: Optional[Z] = None) -> H:
+    def reduce(self: Pype[T], fn: Fn[[H, T], H], init: Optional[X] = None) -> H:
         """
         Reduces this pipe to a single value through the application of the given aggregating function
         to each item:
         ::
 
             >>> from operator import add
+            >>> from pypey import pype
             >>> pype([1, 2, 3]).reduce(add)
             6
 
@@ -647,6 +829,7 @@ class Pype(Generic[T]):
         serve as a default value in case the pipe is empty:
         ::
 
+            >>> from pypey import pype
             >>> pype([1, 2, 3]).reduce(add, init=-1)
             5
 
@@ -671,6 +854,7 @@ class Pype(Generic[T]):
         Returns a pipe with only the items for each the given predicate returns ``False``:
         ::
 
+            >>> from pypey import pype
             >>> list(pype(['a', 'FUN', 'day']).reject(str.isupper))
             ['a', 'day']
 
@@ -683,13 +867,14 @@ class Pype(Generic[T]):
         :raises: ``TypeError`` if ``pred`` is not a ``Callable``
         """
 
-        return Pype(filterfalse(_unpack_fn(pred), self._data()))
+        return Pype(filterfalse(self._ufn(pred), self._data()))
 
     def reverse(self: Pype[T]) -> Pype[T]:
         """
         Returns a pipe where this pipe's items appear in reversed order:
         ::
 
+            >>> from pypey import pype
             >>> list(pype([1, 2, 3]).reverse())
             [3, 2, 1]
 
@@ -706,6 +891,7 @@ class Pype(Generic[T]):
         """
         Returns a pipe where each item is taken from each of this pipe's elements' in turn:
 
+        >>> from pypey import pype
         >>> list(pype(['a', 'fun', 'day']).roundrobin())
         ['a', 'f', 'd', 'u', 'a', 'n', 'y']
 
@@ -723,6 +909,7 @@ class Pype(Generic[T]):
         """
         Returns a pipe with ``k`` items sampled without replacement from this pipe:
 
+        >>> from pypey import pype
         >>> list(pype([1, 2, 3, 4, 5]).sample(2))
         [1, 3]
 
@@ -739,7 +926,7 @@ class Pype(Generic[T]):
         if seed_:
             seed(seed_)
 
-        require(isinstance(k, int), f'n needs to be an int but was [{type(k)}]')
+        require(isinstance(k, int), f'k needs to be an int but was [{type(k)}]')
 
         return Pype(_deferred_sample(self._data(), k))
 
@@ -748,6 +935,7 @@ class Pype(Generic[T]):
         Returns a pipe with only the items for each ``pred`` returns ``True``, opposite of :func:`Pype.reject`:
         ::
 
+            >>> from pypey import pype
             >>> list(pype(['a', 'FUN', 'day']).select(str.isupper))
             ['FUN']
 
@@ -760,13 +948,14 @@ class Pype(Generic[T]):
         :raises: ``TypeError`` if ``pred`` is not a ``Callable``
         """
 
-        return Pype(filter(_unpack_fn(pred), self._data()))
+        return Pype(filter(self._ufn(pred), self._data()))
 
     def shuffle(self: Pype[T], seed_: Optional[Any] = None) -> Pype[T]:
         """
         Returns a shuffled version of this pipe:
         ::
 
+            >>> from pypey import pype
             >>> list(pype([1, 2, 3, 4, 5]).shuffle())
             [3, 2, 1, 5, 4]
 
@@ -788,12 +977,13 @@ class Pype(Generic[T]):
         Returns number of items in this pipe:
         ::
 
+            >>> from pypey import pype
             >>> pype([1, 2, 3]).size()
             3
 
         This operation is eager and immediate.
 
-        :return: an ``integer`` correpsonding to the cardinality of this pipe
+        :return: an ``int`` correpsonding to the cardinality of this pipe
         """
 
         if isinstance(self._it, Sized):
@@ -806,6 +996,7 @@ class Pype(Generic[T]):
         Returns a slice of this pipe between items at positions ``start`` and ``end``, exclusive:
         ::
 
+            >>> from pypey import pype
             >>> list(pype([1, 2, 3, 4]).slice(1, 3))
             [2, 3]
 
@@ -823,11 +1014,12 @@ class Pype(Generic[T]):
 
         return Pype(islice(self._data(), start, end))
 
-    def sort(self: Pype[T], key: Optional[Fn[..., Z]] = None, *, rev: bool = False) -> Pype[T]:
+    def sort(self: Pype[T], key: Optional[Fn[..., Y]] = None, *, rev: bool = False) -> Pype[T]:
         """
         Sorts this pipe's items, using the return value of ``key`` if not ``None``:
         ::
 
+            >>> from pypey import pype
             >>> list(pype(['a', 'funny', 'day']).sort(len))
             ['a', 'day', 'funny']
 
@@ -840,31 +1032,32 @@ class Pype(Generic[T]):
         :return: a sorted pipe
         :raises: ``TypeError`` if ``key`` is not a ``Callable``
         """
+        ufn, data = (None if key is None else self._ufn(key), self._data())
 
-        return Pype(_deferred_sort(self._data(), None if key is None else _unpack_fn(key), rev))
+        return Pype(_deferred_sort(data, ufn, rev))
 
     def split(self: Pype[T], when: Fn[..., bool], mode: str = 'after') -> Pype[Pype[T]]:
         """
         Returns a pipe containing sub-pipes split off this pipe where the given ``when`` predicate is ``True``:
-
         ::
 
+            >>> from pypey import pype
             >>> [list(split) for split in pype(list('afunday')).split(lambda char: char == 'a')
             [['a'], ['f', 'u', 'n', 'd', 'a'], ['y']]
 
         The default mode is to split after every item for which the predicate is ``True``. When ``mode`` is set to
         ``before``, the split is done before:
-
         ::
 
+            >>> from pypey import pype
             >>> [list(split) for split in pype(list('afunday')).split(lambda char: char == 'a', 'before')]
             [['a', 'f', 'u', 'n', 'd'], ['a', 'y']]
 
         And when ``mode`` is set to ``at``, the pipe will be split both before and after, leaving the splitting item
         out:
-
         ::
 
+            >>> from pypey import pype
             >>> [list(split) for split in pype(list('afunday')).split(lambda char: char == 'a', 'at')]
             [[], ['f', 'u', 'n', 'd'], ['y']]
 
@@ -882,16 +1075,20 @@ class Pype(Generic[T]):
         # implementation based on ``more_itertools``'s ``split_before``, ``split_after`` and ``split_at``
         splitting = _split_before if mode == 'before' else _split_after if mode == 'after' else _split_at
 
-        return Pype(map(Pype, splitting(self._data(), _unpack_fn(when))))
+        ufn, data = self._ufn(when), self._data()
+
+        return Pype(map(Pype, splitting(data, ufn)))
 
     def take(self: Pype[T], n: int) -> Pype[T]:
         """
         Returns a pipe containing the first or last ``n`` items of this pipe, depending on the sign of ``n``:
         ::
 
+            >>> from pypey import pype
             >>> list(pype([1, 2, 3, 4]).take(-2))
             [3, 4]
 
+            >>> from pypey import pype
             >>>list(pype([1, 2, 3, 4]).take(2))
             [1, 2]
 
@@ -916,6 +1113,7 @@ class Pype(Generic[T]):
         Returns a pipe containing this pipe's items until ``pred`` returns ``False`` :
         ::
 
+            >>> from pypey import pype
             >>> list(pype([1, 2, 3, 4]).take_while(lambda n: n < 4))
             [1, 2, 3]
 
@@ -926,12 +1124,13 @@ class Pype(Generic[T]):
         :raises: ``TypeError`` if ``pred`` is not a ``Callable``
         """
 
-        return Pype(takewhile(_unpack_fn(pred), self._data()))
+        return Pype(takewhile(self._ufn(pred), self._data()))
 
     def tee(self: Pype[T], n: int) -> Pype[Pype[T]]:
         """
         Returns ``n`` lazy copies of this pipe:
 
+        >>> from pypey import pype
         >>> [list(copy) for copy in pype([1, 2, 3]).tee(2)]
         [[1, 2, 3], [1, 2, 3]]
 
@@ -943,21 +1142,23 @@ class Pype(Generic[T]):
         :raises: ``TypeError`` if ``n`` is not an ``int``
         :raises: ``ValueError`` if ``n`` is non-positive
         """
-        require_val(n > 0, f'number of copies should be greater than 0 but was [{n}]')
+        require_val(n > 0, f'n should be greater than 0 but was [{n}]')
 
         return Pype(map(Pype, tee(self._it, n)))
 
-    def to(self: Pype[T], fn: Fn[[Iterable[T]], Z,], *other_fns: Fn[..., X]) -> Union[Z, X]:
+    def to(self: Pype[T], fn: Fn[[Iterable[T]], Y], *other_fns: Fn[..., X]) -> Union[Y, X]:
         """
         Applies given function to this pipe:
         ::
 
+            >>> from pypey import pype
             >>> pype(['a', 'fun', 'day']).to(list)
             ['a', 'fun', 'day']
 
         This method is eager if the given function is eager and lazy if it's lazy:
         ::
 
+            >>> from pypey import pype
             >>> p = pype(['a', 'fun', 'day']).to(enumerate)
             >>> p
             <enumerate object at 0x7fdb743003c0>
@@ -967,6 +1168,7 @@ class Pype(Generic[T]):
         If provided with more than one function, it will pipe them together:
         ::
 
+            >>> from pypey import pype
             >>> pype(['a', 'fun', 'day']).to(list, len)
             3
 
@@ -978,7 +1180,7 @@ class Pype(Generic[T]):
         :raises: ``TypeError`` if any of the provided functions is not a ``Callable``
         """
 
-        return pipe(*(fn,) + other_fns)(self)
+        return px(_pipe, functions=(fn,) + other_fns)(self)
 
     def to_file(self: Pype[T],
                 target: Union[AnyStr, PathLike, int],
@@ -998,6 +1200,7 @@ class Pype(Generic[T]):
 
             >>> from tempfile import gettempdir
             >>> from os.path import join
+            >>> from pypey import pype
             >>> p = pype(['a', 'fun', 'day']).to_file(join(gettempdir(), 'afunday.txt'), eol=False)
             >>>list(p)
             ['a', 'fun', 'day']
@@ -1008,6 +1211,7 @@ class Pype(Generic[T]):
         converted to string and a line terminator will be appended to it:
         ::
 
+            >>> from pypey import pype
             >>> p = pype([1, 2, 3]).to_file(join(gettempdir(), '123.txt', eol=True))
             >>> list(p)
             [1, 2, 3]
@@ -1018,6 +1222,7 @@ class Pype(Generic[T]):
         ``True`` and the backing ``Iterable`` is lazy, it will be consumed and this method will return an empty pipe:
         ::
 
+            >>> from pypey import pype
             >>> p = pype(iter([1, 2, 3])).to_file(join(gettempdir(), '123.txt'), now=True)
             >>> list(p)
             []
@@ -1035,7 +1240,7 @@ class Pype(Generic[T]):
         :param eol: ``True`` if a line separator should be added to each item, ``False`` otherwise
         :param now: ``False`` to defer writing until pipe is iterated through, ``True`` to write immediately
         :return: this pipe, possibly after writing its items to file
-        :raises: ``ValuError`` if ``mode`` has `r` or `+`
+        :raises: ``ValueError`` if ``mode`` has `r` or `+`
         """
 
         require_val('r' not in mode and '+' not in mode, f'mode cannot be read, was {mode}')
@@ -1057,10 +1262,85 @@ class Pype(Generic[T]):
 
         return self if now else Pype(_lines)
 
+    def to_json(self: Pype[T],
+                target: Union[AnyStr, PathLike, int],
+                *,
+                mode: str = 'w',
+                skipkeys=False,
+                ensure_ascii=True,
+                check_circular=True,
+                allow_nan=True,
+                cls=None,
+                indent=None,
+                separators=None,
+                default=None,
+                sort_keys=False,
+                as_dict: bool = True):
+        """
+        Writes items to a file as a json value:
+        ::
+
+            >>> from tempfile import gettempdir
+            >>> from os.path import join
+            >>> from pypey import pype
+            >>> p = pype(['a', 'fun', 'day']).to_json(join(gettempdir(), 'afunday.json'))
+            <pypey.pype.Pype object at 0x7f7c1971a8d0>
+            >>> list(pype.json(join(gettempdir(), 'afunday.json')))
+            ['a', 'fun', 'day']
+
+        The first parameter is the same to built-in ``open``, and the rest are identical to the ones in ``json.dump``
+        excep the last one which specifies if pairs should be written as dict or as a list. This method will never
+        write single primitives if the pipe contains a single value.
+
+        This method is eager and immediate
+
+        :param target: target to write this pipe's items to
+        :param mode: mode as per built-in ``open``, except no read modes are allowed
+        :param skipkeys: skipkeys as per built-in ``json.dump``
+        :param ensure_ascii: ensure_ascii as per built-in ``json.dump``
+        :param check_circular: check_circular as per built-in ``json.dump``
+        :param allow_nan: allow_nan as per built-in ``json.dump``
+        :param cls: cls as per built-in ``json.dump``
+        :param indent: indent as per built-in ``json.dump``
+        :param separators: separators as per built-in ``json.dump``
+        :param default: default as per built-in ``json.dump``
+        :param sort_keys: sort_keys as per built-in ``json.dump``
+        :param as_dict: True if item pairs should be written as key-value pairs in an object, False if as a list
+        :return: this pipe, after writing its items to a file as a json value
+        :raises: ``ValueError`` if ``mode`` has `r` or `+`
+        :raises: ``TypeError`` if ``as_dict`` is ``True`` and items are not pairs
+        """
+
+        require_val('r' not in mode and '+' not in mode, f'mode cannot be read, was {mode}')
+
+        data = tuple(self._data())
+
+        if as_dict:
+            try:
+                data = dict(data)
+            except TypeError:
+                raise TypeError(f'items cannot be written as dictionary because they are not pairs {data[0:3]}...')
+
+        with open(target, mode=mode) as json_file:
+            json.dump(data,
+                      json_file,
+                      skipkeys=skipkeys,
+                      ensure_ascii=ensure_ascii,
+                      check_circular=check_circular,
+                      allow_nan=allow_nan,
+                      cls=cls,
+                      indent=indent,
+                      separators=separators,
+                      default=default,
+                      sort_keys=sort_keys)
+
+        return self
+
     def top(self: Pype[T], n: int, key: Fn[[T], Any] = ident) -> Pype[T]:
         """
         Returns a pipe with the ``n`` items having the highest value, as defined by the ``key`` function.
 
+        >>> from pypey import pype
         >>> list(pype(['a', 'fun', 'day']).top(2, len))
         ['fun', 'day']
 
@@ -1074,13 +1354,16 @@ class Pype(Generic[T]):
         """
         require_val(n > 0, f'n needs to be non-negative but was [{n}]')
 
-        return Pype(_deferred_top(self._data(), n, _unpack_fn(key)))
+        ufn, data = self._ufn(key), self._data()
+
+        return Pype(_deferred_top(data, n, ufn))
 
     def uniq(self: Pype[T]) -> Pype[T]:
         """
         Returns unique number of items:
         ::
 
+            >>> from pypey import pype
             >>> list(pype(['a', 'b', 'b', 'a']).uniq())
             ['a', 'b']
 
@@ -1097,6 +1380,7 @@ class Pype(Generic[T]):
         """
         Returns a pipe of pipes each with the items of this pipe's ``Iterable`` items:
 
+        >>> from pypey import pype
         >>> [list(p) for p in pype(['any', 'fun', 'day']).unzip()]
         [['a', 'f', 'd'], ['n', 'u', 'a'], ['y', 'n', 'y']]
 
@@ -1115,12 +1399,14 @@ class Pype(Generic[T]):
         Returns a pipe containing pipes, each being a sliding window over this pipe's items:
         ::
 
+            >>> from pypey import pype
             >>> list(pype(iter([1, 2, 3])).window(size=2))
             [(1, 2), (2, 3)]
 
         If ``size`` is larger than this pipe, ``pad`` is used fill in the missing values:
         ::
 
+            >>> from pypey import pype
             >>> list(pype(iter([1, 2, 3])).window(size=4, pad=-1))
             [(1, 2, 3, -1)]
 
@@ -1137,64 +1423,69 @@ class Pype(Generic[T]):
         return Pype(windowed(self._data(), n=size, fillvalue=pad, step=shift))
 
     def zip(self: Pype[I],
-            *other_pipes: Pype[Any],
+            *others: Iterable[Any],
             trunc: bool = True,
             pad: Optional[Any] = None) -> Pype[Tuple[T, ...]]:
         """
-        Zips items in this pipe with each other or with items in each of the given pipes. If no pipes are provided,
-        the items in this pipe will be zipped with each other:
+        Zips items in this pipe with each other or with items in each of the given ``Iterable``-s. If no ``Iterable``-s
+        are provided, the items in this pipe will be zipped with each other:
         ::
 
+            >>> from pypey import pype
             >>> list(pype(['a', 'fun', 'day']).zip(trunc=False, pad='?'))
             [('a', 'f', 'd'), ('?', 'u', 'a'), ('?', 'n', 'y')]
 
 
-        Self-zipping will consume the backing ``Iterable`` if it's lazy. If other pipes are provided, the items in this
-        pipe will be zipped with the items in those:
+        Self-zipping will consume the backing ``Iterable`` if it's lazy. If other ``Iterable``-s are provided, the items
+        in this pipe will be zipped with the items in those:
         ::
 
-            >>> list(pype(['a', 'fun', 'day']).zip(pype([1, 2, 3, 4])))
+            >>> from pypey import pype
+            >>> list(pype(['a', 'fun', 'day']).zip([1, 2, 3, 4]))
             [('a', 1), ('fun', 2), ('day', 3)]
 
-        Similar to :func:`built-in zip` and :func:`itertools.zip_longest`.
+        Similar to built-in ``zip`` and ``itertools.zip_longest``.
 
-        :param other_pipes: pipes to be zipped with this with this one
-        :param trunc: ``True`` to truncate all ``Iterable``-s or ``Pype``-s to the size of the shortest one, ``False``
+        :param others: ``Iterables`` to be zipped with this with this pipe
+        :param trunc: ``True`` to truncate all ``Iterable``-s to the size of the shortest one, ``False``
             to  pad all to the size of the longest one
-        :param pad: value to pad shorter ``Iterable``-s or ``Pype``-s with if ``trunc`` is ``False``; if it's ``True``
+        :param pad: value to pad shorter ``Iterable``-s with if ``trunc`` is ``False``; if it's ``True``
             it's ignored
-        :return: a pipe with the zipped items of this pipe with each other or with the given pipes' ones
-        :raises: ``TypeError`` any of the other pipes is not a ``Pype``
+        :return: a pipe with the zipped items of this pipe with each other or with the given ``Iterable``-s' ones
+        :raises: ``TypeError`` any of ``others`` is not an ``Iterable``
         """
         data = self._data()
 
-        if other_pipes == ():
+        if others == ():
             return Pype(_deferred_zip(data, trunc, pad))
 
-        require(all(isinstance(p, Pype) for p in other_pipes), f'other pipes should be Pypes but were {other_pipes}')
+        require(all(isinstance(p, Iterable) for p in others), 'Inputs to be zipped should be all Iterables')
 
-        return Pype(zip(data, *other_pipes) if trunc else zip_longest(data, *other_pipes, fillvalue=pad))
+        return Pype(zip(data, *others) if trunc else zip_longest(data, *others, fillvalue=pad))
 
-    def zip_with(self: Pype[T], fn: Fn[..., Z]) -> Pype[Tuple[T, Z]]:
+    def zip_with(self: Pype[T], fn: Fn[..., Y]) -> Pype[Tuple[T, Y]]:
         """
         Returns a pipe where each item is a 2-``tuple`` with this pipe's item as the first and the output of ``fn``
         as the second. This is useful for adding an extra piece of data to the current pipeline:
         ::
 
+            >>> from pypey import pype
             >>> list(pype(['a','fun', 'day']).zip_with(len))
             [('a', 1), ('fun', 3), ('day', 3)]
 
         and it's a more concise version of:
         ::
 
+            >>> from pypey import pype
             >>> list(pype(['a','fun', 'day']).map(lambda w: (w, len(w))))
             [('a', 1), ('fun', 3), ('day', 3)]
 
         :param fn: a function taking a possibly unpacked item and returning a value to be zipped with this pipe's item
         :return: a new pipe with zipped items
         """
+        ufn = self._ufn(fn)
 
-        return self.map(lambda item: (item, _unpack_fn(fn)(item)))
+        return Pype(map(lambda item: (item, ufn(item)), self._data()))
 
     def _data(self: Pype[T], teed: bool = False) -> Iterable[T]:
 
@@ -1203,6 +1494,16 @@ class Pype(Generic[T]):
             return copy
 
         return self._it
+
+    def _ufn(self: Pype[T], fn: Fn[[T], Y]) -> Fn[[T], Y]:
+        head, tail = _head_tail(self._it)
+
+        if head is _sent:
+            return fn
+
+        self._it = head + tail if isinstance(tail, tuple) else chain([head], tail)
+
+        return _unpack_fn(fn, head)
 
 
 def _accumulate(data: Iterable[T], func: Fn[[H, T], H], initial: Optional[H] = None) -> Iterator[H]:
@@ -1222,7 +1523,7 @@ def _accumulate(data: Iterable[T], func: Fn[[H, T], H], initial: Optional[H] = N
 
 
 def _clip(data: Iterator[T], n: int) -> Iterable[T]:
-    n_last = deque()
+    n_last: Deque = deque()
 
     try:
 
@@ -1261,7 +1562,21 @@ def _deferred_divide(data: Iterable[T], n: int) -> Iterator[Iterable[T]]:
         yield from chain(((item,) for item in _data), (() for _ in range(n - len(_data))))
 
 
-def _deferred_group_by(data: Iterable[T], key: Fn[..., Z]) -> Iterator[Tuple[Z, List[T]]]:
+def _deferred_freqs(data: Iterable[T], total: bool) -> Iterator[Tuple[Union[T, Total], int, float]]:
+    item_to_freq: Dict[Union[T, Total], int] = defaultdict(int)
+    n = 0
+
+    for item in data:
+        item_to_freq[item] += 1
+        n += 1
+
+    if total:
+        item_to_freq[TOTAL] = n
+
+    yield from ((item, freq, freq / (n or 1)) for item, freq in item_to_freq.items())
+
+
+def _deferred_group_by(data: Iterable[T], key: Fn[..., Y]) -> Iterator[Tuple[Y, List[T]]]:
     key_to_group = defaultdict(list)
 
     for element in data:
@@ -1289,7 +1604,7 @@ def _deferred_shuffle(data: Iterable[T]) -> Iterator[T]:
     yield from data
 
 
-def _deferred_sort(data: Iterable[T], key: Optional[Fn[..., Z]], rev: bool) -> Iterator[T]:
+def _deferred_sort(data: Iterable[T], key: Optional[Fn[..., Y]], rev: bool) -> Iterator[T]:
     yield from sorted(data, key=key, reverse=rev)
 
 
@@ -1309,7 +1624,7 @@ def _deferred_zip(data: Iterable[I], trunc: bool, pad: Any) -> Iterator[Tuple[An
     yield from zip(*data) if trunc else zip_longest(*data, fillvalue=pad)
 
 
-def _lines_to(target: Union[AnyStr, Path, int], lines: Iterable[T], eol: bool, **kwargs) -> Iterator[T]:
+def _lines_to(target: Union[AnyStr, PathLike, int], lines: Iterable[T], eol: bool, **kwargs) -> Iterator[T]:
     """"""
     with open(target, **kwargs) as out:
         for line in lines:
@@ -1335,11 +1650,12 @@ def _ncycles(data: Iterable[T], n: int) -> Iterator[T]:
         n_done += 1
 
 
-def _parallel_map(data: Iterable[T], fn: Fn[..., Z], workers: int, chunk_size: int) -> Iterable[Z]:
+def _parallel_map(data: Iterable[T], fn: Fn[..., Y], workers: int, chunk_size: int) -> Iterable[Y]:
     try:
         # This tries to prevent the most common cause of PicklingError as that would lead to the consumption of `data`
         # if it's lazy and then the imap in the except clause will get a `data` with missing items
         func = fn.func if hasattr(fn, 'func') else fn
+
         if '<lambda>' in func.__qualname__ or '<locals>' in func.__qualname__:
             raise PicklingError
 
@@ -1348,15 +1664,21 @@ def _parallel_map(data: Iterable[T], fn: Fn[..., Z], workers: int, chunk_size: i
 
     except (PicklingError, AttributeError):
 
-        logger.debug('multiprocessing with pickle failed, using pathos with dill instead.')
+        logger.warning('multiprocessing with pickle failed, using pathos with dill instead.')
 
         with ProcessPool(workers) as pool:
             yield from pool.imap(fn, data, chunksize=chunk_size)
 
 
-def _print_fn(item: T, ufn: Fn[..., Z], sep: str, end: str, file: IO, flush: bool):
+def _print_fn(item: T, ufn: Fn[..., Y], sep: str, end: str, file: IO, flush: bool):
     # created as global function to avoid issues with multiprocessing
     print(ufn(item), sep=sep, end=end, file=file, flush=flush)
+
+
+def _side_effect(fn: Fn[[T], Y], data: Iterable[T]) -> Iterable[T]:
+    for item in data:
+        fn(item)
+        yield item
 
 
 def _split_after(data: Iterable[T], pred: Fn[..., bool]) -> Iterator[List[T]]:
@@ -1404,18 +1726,75 @@ def _split_before(data: Iterable[T], pred: Fn[..., bool]) -> Iterator[List[T]]:
         yield chunk
 
 
-def _unpack_fn(fn: Fn[..., T]) -> Fn[..., T]:
+def _head_tail(data: Iterable[T]) -> Tuple[Union[T, object, Tuple], Iterable[T]]:
+    if isinstance(data, Sequence):
+
+        if len(data) > 1:
+            return tuple(data[:1]), tuple(data[1:])
+
+        elif len(data) == 1:
+            return tuple(data[:1]), tuple(data[0:0])
+
+        else:
+            return _sent, data
+
+    try:
+        data = iter(data)
+        return next(data), data
+
+    except StopIteration:
+
+        return _sent, data
+
+
+def _unpack_fn(fn: Fn[..., T], item: T) -> Fn[..., T]:
     require(callable(fn), f'this method takes a function but [{fn}] was found instead')
-    # These conditionals deal with built-in functions as they often don't have a __code__ attribute
+
+    if not hasattr(item, '__iter__') or fn == Pype:
+        return fn
+
+    # These two conditionals deal with built-in functions as they often don't have a __code__ attribute
     if fn in UNARY_WITHOUT_SIGNATURE or hasattr(fn, 'func') and fn.func in UNARY_WITHOUT_SIGNATURE:
         return fn
 
     if fn in N_ARY_WITHOUT_SIGNATURE or hasattr(fn, 'func') and fn.func in N_ARY_WITHOUT_SIGNATURE:
-        return px(_unpacked_fn, fn=fn)
+        return lambda iter_item: fn(*iter_item)
 
-    return fn if _accurate_guess_num_args(fn) <= 1 else px(_unpacked_fn, fn=fn)
+    try:
+        num_args = 0
+
+        for name, param in signature(fn).parameters.items():
+            if param.default == Parameter.empty and \
+                    param.kind != Parameter.KEYWORD_ONLY and \
+                    param.kind != Parameter.VAR_KEYWORD and \
+                    param.kind != Parameter.VAR_POSITIONAL and \
+                    name != 'self' and \
+                    type(fn) != type:
+                num_args += 1
+            elif param.kind == Parameter.VAR_POSITIONAL:
+                num_args += 2
+            elif name == 'self':
+                num_args = 1
+                break
+
+            if num_args > 1:
+                break
+
+        if num_args > 1:
+            return lambda iter_item: fn(*iter_item)
+
+        return fn
+
+    except Exception:
+
+        return fn
 
 
-def _unpacked_fn(item: Any, fn: Fn[..., Z]) -> Z:
+def _pipe(*arg: Any, functions: Tuple[Fn[..., Any], ...]) -> Any:
     # created as global function to avoid issues with multiprocessing
-    return fn(*item) if hasattr(item, '__iter__') else fn(item)
+    result = arg if len(arg) > 1 else arg[0]
+
+    for fn in functions:
+        result = fn(result)
+
+    return result

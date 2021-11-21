@@ -1,12 +1,16 @@
 # Changelog
 
-## [2.0.0](https://github.com/josellarena/pypey/tree/2.0.0) (2021-05-19)
+## [3.0.0](https://github.com/josellarena/pypey/tree/3.0.0) (2021-11-21)
 
-[Full Changelog](https://github.com/josellarena/pypey/compare/1.0.0...2.0.0)
+[Full Changelog](https://github.com/josellarena/pypey/compare/2.0.0...3.0.0)
 
 **Merged pull requests:**
 
-- Fixes and features [\#1](https://github.com/JoseLlarena/pypey/pull/1) ([JoseLlarena](https://github.com/JoseLlarena))
+- add item frequency computation [\#2](https://github.com/JoseLlarena/pypey/pull/2) ([JoseLlarena](https://github.com/JoseLlarena))
+
+## [2.0.0](https://github.com/josellarena/pypey/tree/2.0.0) (2021-05-20)
+
+[Full Changelog](https://github.com/josellarena/pypey/compare/1.0.0...2.0.0)
 
 ## [1.0.0](https://github.com/josellarena/pypey/tree/1.0.0) (2021-03-02)
 

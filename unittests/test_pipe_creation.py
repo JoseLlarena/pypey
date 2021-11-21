@@ -1,13 +1,19 @@
 import pickle
 from os.path import join, dirname
 
-import dill
+import dill  # type: ignore
 from pytest import mark, raises
 from pypey.pypes import pype
 from unittests import _123_pype, _123
 
 TEXT_PATH = join(dirname(__file__), 'test_file.txt')
 BIN_PATH = join(dirname(__file__), '123.bin')
+NUMBER_JSON_PATH = join(dirname(__file__), 'number.json')
+STRING_JSON_PATH = join(dirname(__file__), 'string.json')
+BOOLEAN_JSON_PATH = join(dirname(__file__), 'boolean.json')
+LIST_JSON_PATH = join(dirname(__file__), 'list.json')
+OBJECT_JSON_PATH = join(dirname(__file__), 'object.json')
+NULL_JSON_PATH = join(dirname(__file__), 'null.json')
 
 
 def test_creates_a_pipe_from_the_lines_of_a_text_file():
@@ -59,6 +65,30 @@ def test_pipe_can_be_dilled_and_undilled(tmpdir: str):
 
     with open(bin_path, 'rb') as bin_file:
         assert tuple(dill.load(bin_file)) == tuple(map(lambda n: n * 2, _123))
+
+
+def test_creates_pipe_from_number_json(tmpdir: str):
+    assert tuple(pype.json(NUMBER_JSON_PATH)) == (42,)
+
+
+def test_creates_pipe_from_string_json(tmpdir: str):
+    assert tuple(pype.json(STRING_JSON_PATH)) == ('forty-two',)
+
+
+def test_creates_pipe_from_boolean_json(tmpdir: str):
+    assert tuple(pype.json(BOOLEAN_JSON_PATH)) == (True,)
+
+
+def test_creates_pipe_from_null_json(tmpdir: str):
+    assert tuple(pype.json(NULL_JSON_PATH)) == (None,)
+
+
+def test_creates_pipe_from_list_json(tmpdir: str):
+    assert tuple(pype.json(LIST_JSON_PATH)) == (1, 2, 3, 5, 8, 13)
+
+
+def test_creates_pipe_from_object_json(tmpdir: str):
+    assert tuple(pype.json(OBJECT_JSON_PATH)) == (('a', 1.), ('fun', 2.), ('day', 3.))
 
 
 def _x2(n: int) -> int:
