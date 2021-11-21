@@ -1,5 +1,5 @@
 """
-Factory for creating pype from different sources.
+Factory for creating pipes from different sources.
 """
 import json as built_in_json
 from collections import abc
