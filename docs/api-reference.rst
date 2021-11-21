@@ -1,5 +1,7 @@
+=============
 API Reference
 =============
+
 
 :class:`~pypey.Pype`'s methods can be grouped according to whether they are lazy or eager vs whether they are deferred
 or immediate:
@@ -149,15 +151,54 @@ Some methods are just specialisations, or convenient versions of others:
 | :func:`~pypey.Pype.window`       | :func:`~pypey.Pype.chunk`        |
 +----------------------------------+----------------------------------+
 
-Module contents
----------------
+----
 
-.. automodule:: pypey
+**Modules**
+
+pypes
+=========
+
+.. automodule:: pypey.pypes
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. autodata:: pypey.pypes.pype
+
+pype
+=========
+
+.. automodule:: pypey.pype
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+
+func
+=========
+
+.. automodule:: pypey.func
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 .. autodata:: pypey.func.Fn
+
+
+dycts
+=========
+
+.. automodule:: pypey.dycts
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+
+dyct
+=========
+
+.. automodule:: pypey.dyct
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
 

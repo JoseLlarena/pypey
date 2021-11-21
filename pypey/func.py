@@ -1,3 +1,6 @@
+"""
+Functions and constants for a concise use of higher-level functions
+"""
 from functools import partial
 from typing import Any, Callable as Fn, TypeVar, Iterable, Type, Tuple
 
@@ -11,8 +14,8 @@ V = TypeVar('V')
 X = TypeVar('X')
 Y = TypeVar('Y')
 
-#:
-px: Fn[..., Fn] = partial  # Concise alias of ``functools.partial``
+#: Concise alias of ``functools.partial``
+px: Fn[..., Fn] = partial
 
 
 def ident(item: T) -> T:

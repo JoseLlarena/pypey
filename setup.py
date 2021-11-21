@@ -2,7 +2,7 @@ from pathlib import Path
 from setuptools import setup
 
 setup(name='pypey',
-      version='3.0.0',
+      version='3.0.1',
       description='A library for building data pipelines',
       long_description=(Path(__file__).parent.resolve() / 'README.md').read_text(encoding='utf8'),
       long_description_content_type='text/markdown',

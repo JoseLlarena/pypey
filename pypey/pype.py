@@ -1,3 +1,6 @@
+"""
+Main class for building streaming pipelines
+"""
 from __future__ import annotations
 
 import json
@@ -49,6 +52,7 @@ class Total(str):
         return str(self)
 
 
+#: Constant indicating the aggregated counts in :func:`Pype.freqs`
 TOTAL = Total()
 
 UNARY_WITHOUT_SIGNATURE = {__import__,
