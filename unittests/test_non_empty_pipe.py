@@ -213,7 +213,8 @@ def test_groups_items_by_given_key():
 
 
 def test_interleaves_items_with_other_iterable():
-    assert tuple(_123_pype().interleave(_a_fun_day_pype())) == (1, 'a', 2, 'fun', 3, 'day')
+    assert tuple(pype([[1], [2], [3]]).interleave([[True, False], [True, True], [False, True]])) \
+           == ([1], [True, False], [2], [True, True], [3], [False, True])
 
 
 def test_interleaves_items_with_other_iterable_truncating_to_shortest():
