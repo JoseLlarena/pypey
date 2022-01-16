@@ -28,7 +28,7 @@ from functools import reduce
 from heapq import nlargest
 from itertools import chain, tee, accumulate, filterfalse, islice, dropwhile, takewhile, cycle, zip_longest, product
 from more_itertools import tail, random_permutation, ichunked, unique_everseen, partition, unzip, \
-    always_reversible, interleave, interleave_longest, collapse, split_into
+    always_reversible, interleave, interleave_longest, split_into
 from sys import stdout
 from typing import Iterator, Iterable, Tuple, Generic, Union, Any, Optional, List, AnyStr, IO, Sequence, NamedTuple, \
     Deque, Dict
@@ -180,7 +180,7 @@ class Pype(Generic[T]):
 
         return Pype(chain(self._data(), other))
 
-    def chunk(self: Pype[T], size: Union[int, Iterable[int]]) -> Pype[Pype[T]]:
+    def chunk(self: Pype[T], size: Union[int, Iterable[Optional[int]]]) -> Pype[Pype[T]]:
         """
         Breaks pipe into sub-pipes with up to ``size`` items each:
         ::
@@ -223,6 +223,14 @@ class Pype(Generic[T]):
             >>> from pypey import pype
             >>> [list(chunk) for chunk in pype([1, 2, 3, 4]).chunk([1, 2, 3, 4])]
             [[1], [2, 3], [4], []]
+
+        The last size can be ``None``, in wich case, the last chunk's will be remaining items after the one-but-last
+        size.
+        ::
+
+            >>> from pypey import pype
+            >>> [list(chunk) for chunk in pype([1, 2, 3, 4]).chunk([1, None])]
+            [[1], [2, 3, 4]]
 
         This method tees the backing ``Iterable``.
 
@@ -649,12 +657,16 @@ class Pype(Generic[T]):
         require(isinstance(n, int), f'n needs to be a positive integer but was [{n}]')
         require_val(n >= 1, f'n needs to be an int but was [{type(n)}]')
 
-        this_data = self._data() if n == 1 else ichunked(self._data(), n)
+        fn = interleave if trunc else interleave_longest
 
-        if trunc:
-            return Pype(collapse(interleave(this_data, other), levels=1))
+        if n == 1:
+            return Pype(fn(self._data(), other))
 
-        return Pype(collapse(interleave_longest(this_data, other), levels=1))
+        return (self
+                .chunk(size=n)
+                .zip(other, trunc=trunc)
+                .map(lambda chunk, item: chunk.cat((item,) if item is not None else chunk) if chunk else (item,))
+                .flat())
 
     def it(self: Pype[T]) -> Iterator[T]:
         """
