@@ -1810,6 +1810,10 @@ def _pipe(*arg: Any, functions: Tuple[Fn[..., Any], ...]) -> Any:
     # created as global function to avoid issues with multiprocessing
     result = arg if len(arg) > 1 else arg[0]
 
+    for f in functions:
+        if not callable(f):
+            raise TypeError(f"'{type(f).__name__}' object is not callable")
+
     for fn in functions:
         result = fn(result)
 
