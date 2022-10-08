@@ -1,11 +1,15 @@
 """
 These tests specify behaviour of input function invocation as regards item unpacking logic for different signature types
 """
+import sys
 
 from pytest import mark
 
 from pypey import px
 from pypey.pype import _unpack_fn, UNARY_WITHOUT_SIGNATURE, N_ARY_WITHOUT_SIGNATURE
+
+
+SUPPORTS_POSITIONAL_ONLY_PARAMS = sys.version_info.minor > 7
 
 
 class TestClass:
@@ -27,27 +31,49 @@ class TestClass:
     def __eq__(self, other):
         return isinstance(other, type(self)) and self.param == other.param
 
+    def __hash__(self):
+        return id(self)
 
-unary_funcs = (lambda n, /: n,
-               lambda n=4, /: n,
-               lambda n: n,
-               lambda n=4: n)
+
+def legacy_compat_lambda_defs(*lambdas):
+    """
+    Allow testing lambdas with positional only parameters in the versions
+    of python where they are supported.
+    """
+    safe_lambdas = []
+    for l in lambdas:
+        if isinstance(l, str):
+            if SUPPORTS_POSITIONAL_ONLY_PARAMS:
+                eval(f"""safe_lambdas.append({l})""")
+        else:
+            safe_lambdas.append(l)
+    return tuple(safe_lambdas)
+
+
+unary_funcs = legacy_compat_lambda_defs(
+    "lambda n, /: n",
+    "lambda n=4, /: n",
+    lambda n: n,
+    lambda n=4: n)
 
 keyword_only_unary_funcs = (lambda *, n: n, lambda *, n=4: n)
 
-dyadic_funcs = (lambda n, m, /: [n, m], lambda n, m: [n, m])
+dyadic_funcs = legacy_compat_lambda_defs(
+    "lambda n, m, /: [n, m]",
+    lambda n, m: [n, m]
+)
 
 keyword_only_dyadic_funcs = (lambda *, n, m: (n, m), lambda *, n=4, m=5: (n, m))
 
-effectively_unary_funcs = (
-    lambda n=4, m=5, /: [n, m],
+effectively_unary_funcs = legacy_compat_lambda_defs(
+    "lambda n=4, m=5, /: [n, m]",
     lambda n=4, m=5: [n, m],
 
     lambda n, **kwargs: [n, kwargs],
     lambda n=8, **kwargs: [n, kwargs],
 
-    px(lambda n, m, /: [n, m], 6),
-    px(lambda n=4, m=5, /: [n, m], 6),
+    "px(lambda n, m, /: [n, m], 6)",
+    "px(lambda n=4, m=5, /: [n, m], 6)",
     px(lambda n, m: [n, m], 6),
     px(lambda n, m: [n, m], m=7),
     px(lambda n=4, m=5: [n, m], 6),
